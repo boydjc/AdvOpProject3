@@ -1,2 +1,2 @@
 build:
-	gcc -o aubatch aubatch.c
+	gcc -o aubatch aubatch.c -I./include/
