@@ -14,6 +14,9 @@ typedef struct Dispatcher {
 void* schedulerCount();
 void* dispatcherCount();
 
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+int threadCounter = 0;
+
 int main() {
 
     pthread_t schedulerThread, dispatcherThread;
@@ -37,16 +40,22 @@ int main() {
 
 void* schedulerCount(void* ptr) {
     int count;
-    for(count=0; count<10; count++) {
-        printf("Scheduler: %i\n", count);
+    for(count=0; count<5; count++) {
+        pthread_mutex_lock(&mutex);
+        threadCounter--;
+        pthread_mutex_unlock(&mutex);
+        printf("Scheduler: %i\n", threadCounter);
         sleep(1.2);
     }
 }
 
 void* dispatcherCount(void* ptr) {
     int count;
-    for(count=0; count<10; count++) {
-        printf("Dispatcher: %i\n", count);
+    for(count=0; count<5; count++) {
+        pthread_mutex_lock(&mutex);
+        threadCounter++;
+        pthread_mutex_unlock(&mutex);
+        printf("Dispatcher: %i\n", threadCounter);
         sleep(1);
     }
 }
