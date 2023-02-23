@@ -1,6 +1,15 @@
 #include <stdio.h>
-#include "Scheduler.h"
-#include "Dispatcher.h"
+
+typedef struct Scheduler {
+    char* policyName;
+} Scheduler;
+
+typedef struct Dispatcher {
+
+} Dispatcher;
+
+void schedulerCount();
+void dispatcherCount();
 
 int main() {
 
@@ -8,15 +17,26 @@ int main() {
 
     Scheduler scheduler;
 
-    scheduler.testName = "Scheduler";
+    scheduler.policyName = "FCFS";
 
-    printf("%s\n", scheduler.testName);
+    schedulerCount();
+    dispatcherCount();
 
     Dispatcher dispatcher;
 
-    dispatcher.testName = "Dispatcher";
-
-    printf("%s\n", dispatcher.testName);
-
     return 0;
+}
+
+void schedulerCount() {
+    int count;
+    for(count=0; count<10; count++) {
+        printf("Scheduler: %i\n", count);
+    }
+}
+
+void dispatcherCount() {
+    int count;
+    for(count=0; count<10; count++) {
+        printf("Dispatcher: %i\n", count);
+    }
 }
