@@ -11,10 +11,14 @@ typedef struct Dispatcher {
 
 } Dispatcher;
 
-void* schedulerCount();
-void* dispatcherCount();
+void* schedulerModule();
+void* dispatcherModule();
 
-pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_cond_t counterCondition = PTHREAD_COND_INITIALIZER;
+
+pthread_mutex_t conditionMutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t counterMutex = PTHREAD_MUTEX_INITIALIZER;
+
 int threadCounter = 0;
 
 int main() {
@@ -39,23 +43,46 @@ int main() {
 }
 
 void* schedulerCount(void* ptr) {
-    int count;
-    for(count=0; count<5; count++) {
-        pthread_mutex_lock(&mutex);
-        threadCounter--;
-        pthread_mutex_unlock(&mutex);
+
+    while(threadCounter <= 10) {
+
+        pthread_mutex_lock(&counterMutex);
+        threadCounter++;
+        pthread_mutex_unlock(&counterMutex);
+
         printf("Scheduler: %i\n", threadCounter);
-        sleep(1.2);
+        
+        pthread_mutex_lock(&conditionMutex);
+        pthread_cond_signal(&counterCondition);
+        pthread_mutex_unlock(&conditionMutex);
+
+        if(threadCounter < 10) {
+            pthread_mutex_lock(&conditionMutex);
+            pthread_cond_wait(&counterCondition, &conditionMutex);
+            pthread_mutex_unlock(&conditionMutex);
+        }
     }
 }
 
 void* dispatcherCount(void* ptr) {
-    int count;
-    for(count=0; count<5; count++) {
-        pthread_mutex_lock(&mutex);
+
+    while(threadCounter <= 10) {
+
+        pthread_mutex_lock(&counterMutex);
         threadCounter++;
-        pthread_mutex_unlock(&mutex);
+        pthread_mutex_unlock(&counterMutex);
+
         printf("Dispatcher: %i\n", threadCounter);
-        sleep(1);
+
+        pthread_mutex_lock(&conditionMutex);
+        pthread_cond_signal(&counterCondition);
+        pthread_mutex_unlock(&conditionMutex);
+
+        if(threadCounter <= 10) {
+            pthread_mutex_lock(&conditionMutex);
+            pthread_cond_wait(&counterCondition, &conditionMutex);
+            pthread_mutex_unlock(&conditionMutex);
+        }
     }
+    
 }
