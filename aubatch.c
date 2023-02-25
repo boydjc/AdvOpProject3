@@ -38,7 +38,6 @@ typedef struct JobQueue {
 void* schedulerModule();
 void* dispatcherModule();
 void displayMainMenu();
-void submitJob();
 void init();
 
 /***********************************************
@@ -89,8 +88,11 @@ int main() {
         printf("User choice was: %d\n", userChoice);
         if(userChoice == 2) {
             quitFlag = 1;
+            // after setting the quit flag, broadcast to the other threads in case they 
+            // happen to be waiting still
+            pthread_cond_broadcast(&queue_condition);
         } else {
-            submitJob();
+            scheduler.job_cache = 'a';
             printf("Job submitted\n");
         }
     }
@@ -105,6 +107,7 @@ int main() {
  *                           *
  *    Function Definitions   *
  *                           *
+ *                           *
  *****************************/
 
 /*
@@ -116,22 +119,16 @@ void init() {
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
-    scheduler.job_cache = NULL;
+    scheduler.job_cache = '\0';
 
     dispatcher.queue_tail = 0;
 
-    job_queue.queue = {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL};
+    int i;
+    for(i=0; i<JOB_QUEUE_MAX_SIZE; i++) {
+        job_queue.queue[i] = '\0';
+    }
 
     job_queue.queue_job_num = 0;      
-}
-
-void submitJob() {
-    printf("Number of elements in queue before add: %i\n", job_queue.queue_job_num);
-
-    job_queue.queue[job_queue.queue_job_num] = 'a';
-    job_queue.queue_job_num++;
-
-    printf("Number of elements in queue after add: %i\n", job_queue.queue_job_num);  
 }
 
 void* schedulerModule(void* ptr) {
@@ -139,25 +136,39 @@ void* schedulerModule(void* ptr) {
 
     while(quitFlag != 1) {
         pthread_mutex_lock(&condition_mutex);
-        while(job_queue.queue_job_num >= JOB_QUEUE_MAX_SIZE) {
+        if(job_queue.queue_job_num >= JOB_QUEUE_MAX_SIZE) {
             pthread_cond_wait(&queue_condition, &condition_mutex);  
         }
         pthread_mutex_unlock(&condition_mutex);
         
-        if(scheduler.job_cache != '') {
-            printf("Scheduler detected job in pool\n"); 
+        if(scheduler.job_cache != '\0') {
+
+            printf("Scheduler detected job in pool\n");
+            printf("\tScheduler head value: %i\n", scheduler.queue_head);
             pthread_mutex_lock(&queue_mutex);
+            printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
             job_queue.queue[scheduler.queue_head] = scheduler.job_cache;
+            job_queue.queue_job_num++;
+            printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
             pthread_mutex_unlock(&queue_mutex);
-            scheduler.job_cache = '';
+            scheduler.job_cache = '\0';
 
             if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE) {
                 scheduler.queue_head = 0;
-            else {
+            }else {
                 scheduler.queue_head++;
             }
+
+            // signal to the dispatcher
+            pthread_mutex_lock(&condition_mutex);
+            pthread_cond_signal(&queue_condition);
+            pthread_mutex_unlock(&condition_mutex);
+
         }         
     }
+
+    printf("Scheduler Done\n");
+ 
 }
 
 void* dispatcherModule(void* ptr) {
@@ -165,21 +176,31 @@ void* dispatcherModule(void* ptr) {
 
     while(quitFlag != 1) {
         pthread_mutex_lock(&condition_mutex);
-        while(job_queue.queue_job_num <= 0) {
+        if(job_queue.queue_job_num <= 0) {
             pthread_cond_wait(&queue_condition, &condition_mutex);
         }
         pthread_mutex_unlock(&condition_mutex);
-        
-        printf("Dispatcher detected job in queue\n");
-        pthread_mutex_lock(&queue_mutex);
-        char job = job_queue.queue[dispatcher.queue_tail];
-        job_queue.queue[dispatcher.queue_tail] = NULL;
+
+        pthread_mutex_lock(&queue_mutex);     
+        if(job_queue.queue[dispatcher.queue_tail] != '\0') {
+            printf("Dispatcher detected job in queue\n");
+            printf("\tDispatcher tail value: %i\n", dispatcher.queue_tail);
+            char job = job_queue.queue[dispatcher.queue_tail];
+            job_queue.queue[dispatcher.queue_tail] = '\0';
+            job_queue.queue_job_num--;
+            printf("\tJob was: %c\n", job);
+            sleep(3); 
+        }
         pthread_mutex_unlock(&queue_mutex);
         if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE) {
             dispatcher.queue_tail = 0;
-        else {
+        }else {
             dispatcher.queue_tail++;
         } 
+    }
+
+    printf("Dispatcher Done\n");
+
 }
 
 void displayMainMenu() {
