@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <pthread.h>
+#include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
 
@@ -12,13 +13,18 @@
  *                 *
  *******************/
 
+typedef struct Job {
+    char* job_name;
+    int est_run_time;
+    int priority;
+    char* arg_list[];
+} Job;
+
 typedef struct Scheduler {
     char* policy;
     int queue_head;
 
-    /* This is a pool to hold jobs as they come until the scheduler
-     * can get around to scheduling them */ 
-    char job_cache;
+    Job job_cache;
 } Scheduler;
 
 typedef struct Dispatcher {
@@ -26,7 +32,7 @@ typedef struct Dispatcher {
 } Dispatcher;
 
 typedef struct JobQueue {
-    char queue[JOB_QUEUE_MAX_SIZE];
+    Job queue[JOB_QUEUE_MAX_SIZE];
     int queue_job_num;
 } JobQueue;
 
@@ -64,6 +70,7 @@ pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 Dispatcher dispatcher;
 Scheduler scheduler;
 JobQueue job_queue;
+Job empty_job;
 
 int quitFlag;
 
@@ -119,15 +126,18 @@ void init() {
 
     quitFlag = 0;
 
+    empty_job.job_name = "empty";
+    empty_job.arg_list[0] = '\0';
+
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
-    scheduler.job_cache = '\0';
+    scheduler.job_cache = empty_job;
 
     dispatcher.queue_tail = 0;
 
     int i;
     for(i=0; i<JOB_QUEUE_MAX_SIZE; i++) {
-        job_queue.queue[i] = '\0';
+        job_queue.queue[i] = empty_job;
     }
 
     job_queue.queue_job_num = 0;      
@@ -143,7 +153,7 @@ void* schedulerModule(void* ptr) {
         }
         pthread_mutex_unlock(&condition_mutex);
         
-        if(scheduler.job_cache != '\0') {
+        if(strcmp(scheduler.job_cache.job_name, "empty") != 0) {
 
             printf("Scheduler detected job in pool\n");
             printf("\tScheduler head value: %i\n", scheduler.queue_head);
@@ -153,7 +163,7 @@ void* schedulerModule(void* ptr) {
             job_queue.queue_job_num++;
             printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
             pthread_mutex_unlock(&queue_mutex);
-            scheduler.job_cache = '\0';
+            scheduler.job_cache = empty_job;
 
             if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE) {
                 scheduler.queue_head = 0;
@@ -184,14 +194,28 @@ void* dispatcherModule(void* ptr) {
         pthread_mutex_unlock(&condition_mutex);
 
         pthread_mutex_lock(&queue_mutex);     
-        if(job_queue.queue[dispatcher.queue_tail] != '\0') {
+        if(strcmp(job_queue.queue[dispatcher.queue_tail].job_name, "empty") != 0) {
             printf("Dispatcher detected job in queue\n");
             printf("\tDispatcher tail value: %i\n", dispatcher.queue_tail);
-            char job = job_queue.queue[dispatcher.queue_tail];
-            job_queue.queue[dispatcher.queue_tail] = '\0';
+            Job job = job_queue.queue[dispatcher.queue_tail];
+            job_queue.queue[dispatcher.queue_tail] = empty_job;
             job_queue.queue_job_num--;
-            printf("\tJob was: %c\n", job);
-            sleep(3); 
+            printf("\tJob was: %s\n", job.job_name); 
+
+            pid_t pid;
+            pid = fork();
+  
+            switch(pid) {
+                case -1:
+                    perror("fork");
+                    break;
+                case 0:
+                    execv(job.job_name, job.arg_list);
+                    break;
+                default:
+                    //processed by parent
+                    break;
+            }            
         }
         pthread_mutex_unlock(&queue_mutex);
         if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE) {
@@ -239,10 +263,16 @@ void parseUserCommand(char* user_command) {
         pthread_cond_broadcast(&queue_condition);
     } else if(strcmp(cleaned_command, "help") == 0) {
         displayHelp();
+    } else if(strcmp(cleaned_command, "test") == 0) {
+        Job test_job;
+        test_job.job_name = "sampleProgram";
+        test_job.arg_list[0] = test_job.job_name;
+        test_job.est_run_time = 10;
+        test_job.priority = 0;
+        scheduler.job_cache = test_job;
+        printf("Job submitted\n");
     }else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
-        //scheduler.job_cache = 'a';
-        //printf("Job submitted\n");
     }
 
 }
@@ -254,7 +284,6 @@ char* cleanCommand(char* cmd) {
     int letter_count = 0;
 
     for(i=0; i<strlen(cmd); i++) {
-
         if(cmd[i] != ' ' && cmd[i] != '\n') {
             cmd[letter_count] = cmd[i];
             letter_count++;
