@@ -1,2 +1,2 @@
 build:
-	gcc -lpthread -o aubatch aubatch.c 
+	gcc -g -lpthread -o aubatch aubatch.c 
