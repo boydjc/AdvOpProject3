@@ -38,7 +38,8 @@ typedef struct JobQueue {
 
 void* schedulerModule();
 void* dispatcherModule();
-void displayMainMenu();
+void displayGreeting();
+void displayHelp();
 void init();
 void parseUserCommand(char* userCommand);
 char* cleanCommand(char* cmd);
@@ -91,8 +92,9 @@ int main() {
     int iret1 = pthread_create(&scheduler_thread, NULL, schedulerModule, NULL);
     int iret2 = pthread_create(&dispatcher_thread, NULL, dispatcherModule, NULL);
 
+    displayGreeting();
     while(quitFlag == 0) {
-        displayMainMenu();
+        printf(">");
         getline(&user_command, &user_command_size, stdin);
         parseUserCommand(user_command);
     }
@@ -132,7 +134,7 @@ void init() {
 }
 
 void* schedulerModule(void* ptr) {
-    printf("Scheduler is online and waiting...\n");
+    //printf("Scheduler is online and waiting...\n");
 
     while(quitFlag != 1) {
         pthread_mutex_lock(&condition_mutex);
@@ -172,7 +174,7 @@ void* schedulerModule(void* ptr) {
 }
 
 void* dispatcherModule(void* ptr) {
-    printf("Dispatcher is online and waiting...\n");
+    //printf("Dispatcher is online and waiting...\n");
 
     while(quitFlag != 1) {
         pthread_mutex_lock(&condition_mutex);
@@ -203,16 +205,27 @@ void* dispatcherModule(void* ptr) {
 
 }
 
-void displayMainMenu() {
+void displayGreeting() {
     printf("Welcome to Joshua Boyd's batch job scheduler Version 1.0\n");
     printf("Type 'help' to find more about AUbatch commands\n");
     printf("1. Submit new job\n");
     printf("2. Quit\n");
-    printf("> ");
+}
+
+void displayHelp() {
+    printf("\trun <job> <time> <pri>: submit a job named <job>,\n");
+    printf("\t\t\t\texecution time is <time>,\n");
+    printf("\t\t\t\tpriority time is <pri>\n\n");
+    printf("\tlist: display the job status.\n\n");
+    printf("\tfcfs: change the scheduling policy to FCFS.\n\n");
+    printf("\tsjf: change the scheduling policy to SJF.\n\n");
+    printf("\tpriority: change the scheduling policy to priority.\n\n");
+    printf("\ttest <benchmark> <policy> <num_of_jobs> <priority_levels>\n\n");
+    printf("\t\t<min_cpu_time> <max_cpu_time>\n\n");
+    printf("\tquit: exit AUbatch\n\n");
 }
 
 void parseUserCommand(char* user_command) {
-    printf("%s\n", user_command);
 
     // tokenize the command and start taking action based on the tokens 
     char* base_command = strtok(user_command, " ");  
@@ -224,8 +237,10 @@ void parseUserCommand(char* user_command) {
         // after setting the quit flag, broadcast to the other threads in case they
         // happen to be waiting still
         pthread_cond_broadcast(&queue_condition);
-    } else {
-        printf("Not Equal\n");
+    } else if(strcmp(cleaned_command, "help") == 0) {
+        displayHelp();
+    }else {
+        printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
         //scheduler.job_cache = 'a';
         //printf("Job submitted\n");
     }
