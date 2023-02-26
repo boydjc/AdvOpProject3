@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <unistd.h>
+#include <string.h>
 
 #define JOB_QUEUE_MAX_SIZE 10
 
@@ -39,6 +40,8 @@ void* schedulerModule();
 void* dispatcherModule();
 void displayMainMenu();
 void init();
+void parseUserCommand(char* userCommand);
+char* cleanCommand(char* cmd);
 
 /***********************************************
  *                                             *
@@ -72,7 +75,14 @@ int quitFlag;
 
 int main() {
 
-    int userChoice = 0;
+    char* user_command;
+    size_t user_command_size = 64; 
+    user_command = (char*) malloc(user_command_size * sizeof(char));
+
+    if(user_command == NULL) {
+        fprintf(stderr, "Unable to malloc userCommand buffer\n");
+        return 1;
+    }
 
     init();
 
@@ -81,20 +91,10 @@ int main() {
     int iret1 = pthread_create(&scheduler_thread, NULL, schedulerModule, NULL);
     int iret2 = pthread_create(&dispatcher_thread, NULL, dispatcherModule, NULL);
 
-    printf("Hello from aubatch\n");
     while(quitFlag == 0) {
         displayMainMenu();
-        scanf("%d", &userChoice);
-        printf("User choice was: %d\n", userChoice);
-        if(userChoice == 2) {
-            quitFlag = 1;
-            // after setting the quit flag, broadcast to the other threads in case they 
-            // happen to be waiting still
-            pthread_cond_broadcast(&queue_condition);
-        } else {
-            scheduler.job_cache = 'a';
-            printf("Job submitted\n");
-        }
+        getline(&user_command, &user_command_size, stdin);
+        parseUserCommand(user_command);
     }
 
     pthread_join(scheduler_thread, NULL);
@@ -204,7 +204,49 @@ void* dispatcherModule(void* ptr) {
 }
 
 void displayMainMenu() {
+    printf("Welcome to Joshua Boyd's batch job scheduler Version 1.0\n");
+    printf("Type 'help' to find more about AUbatch commands\n");
     printf("1. Submit new job\n");
     printf("2. Quit\n");
     printf("> ");
+}
+
+void parseUserCommand(char* user_command) {
+    printf("%s\n", user_command);
+
+    // tokenize the command and start taking action based on the tokens 
+    char* base_command = strtok(user_command, " ");  
+
+    char* cleaned_command = cleanCommand(base_command);    
+
+    if(strcmp(cleaned_command, "quit") == 0) {
+        quitFlag = 1;
+        // after setting the quit flag, broadcast to the other threads in case they
+        // happen to be waiting still
+        pthread_cond_broadcast(&queue_condition);
+    } else {
+        printf("Not Equal\n");
+        //scheduler.job_cache = 'a';
+        //printf("Job submitted\n");
+    }
+
+}
+
+char* cleanCommand(char* cmd) {
+
+    int i;
+    
+    int letter_count = 0;
+
+    for(i=0; i<strlen(cmd); i++) {
+
+        if(cmd[i] != ' ' && cmd[i] != '\n') {
+            cmd[letter_count] = cmd[i];
+            letter_count++;
+        }       
+    }
+
+    cmd[letter_count] = '\0';
+
+    return cmd;
 }
