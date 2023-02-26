@@ -156,7 +156,7 @@ void* schedulerModule(void* ptr) {
         if(strcmp(scheduler.job_cache.job_name, "empty") != 0) {
 
             printf("Scheduler detected job in pool\n");
-            printf("\tScheduler head value: %i\n", scheduler.queue_head);
+            printf("\tScheduler head value before inserting job: %i\n", scheduler.queue_head);
             pthread_mutex_lock(&queue_mutex);
             printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
             job_queue.queue[scheduler.queue_head] = scheduler.job_cache;
@@ -170,6 +170,8 @@ void* schedulerModule(void* ptr) {
             }else {
                 scheduler.queue_head++;
             }
+
+            printf("\tScheduler head value after inserting job: %i\n", scheduler.queue_head);
 
             // signal to the dispatcher
             pthread_mutex_lock(&condition_mutex);
@@ -196,10 +198,11 @@ void* dispatcherModule(void* ptr) {
         pthread_mutex_lock(&queue_mutex);     
         if(strcmp(job_queue.queue[dispatcher.queue_tail].job_name, "empty") != 0) {
             printf("Dispatcher detected job in queue\n");
-            printf("\tDispatcher tail value: %i\n", dispatcher.queue_tail);
+            printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
             Job job = job_queue.queue[dispatcher.queue_tail];
             job_queue.queue[dispatcher.queue_tail] = empty_job;
             job_queue.queue_job_num--;
+            pthread_mutex_unlock(&queue_mutex);
             printf("\tJob was: %s\n", job.job_name); 
 
             pid_t pid;
@@ -214,15 +217,16 @@ void* dispatcherModule(void* ptr) {
                     break;
                 default:
                     //processed by parent
+                    if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE) {
+                        dispatcher.queue_tail = 0;
+                    }else {
+                        dispatcher.queue_tail++;
+                    }
+                    printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
+                    pid = wait(NULL);
                     break;
-            }            
+            }             
         }
-        pthread_mutex_unlock(&queue_mutex);
-        if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE) {
-            dispatcher.queue_tail = 0;
-        }else {
-            dispatcher.queue_tail++;
-        } 
     }
 
     printf("Dispatcher Done\n");
