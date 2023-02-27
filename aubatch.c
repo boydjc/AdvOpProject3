@@ -165,7 +165,7 @@ void* schedulerModule(void* ptr) {
             pthread_mutex_unlock(&queue_mutex);
             scheduler.job_cache = NULL;
 
-            if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE) {
+            if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE-1) {
                 scheduler.queue_head = 0;
             }else {
                 scheduler.queue_head++;
@@ -204,6 +204,14 @@ void* dispatcherModule(void* ptr) {
             job_queue.queue_job_num--;
             pthread_mutex_unlock(&queue_mutex);
             printf("\tJob was: %s\n", job->job_name); 
+            
+            if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
+                dispatcher.queue_tail = 0;
+            } else {
+                dispatcher.queue_tail++;
+            }
+
+            printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
 
             pid_t pid;
             pid = fork();
@@ -216,16 +224,9 @@ void* dispatcherModule(void* ptr) {
                     execv(job->job_name, job->arg_list);
                     break;
                 default:
-                    //processed by parent
-                    if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE) {
-                        dispatcher.queue_tail = 0;
-                    }else {
-                        dispatcher.queue_tail++;
-                    }
-                    printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
                     pid = wait(NULL);
                     break;
-            }             
+            }           
         }
     }
 
