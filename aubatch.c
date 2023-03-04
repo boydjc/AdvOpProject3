@@ -46,6 +46,13 @@ void* schedulerModule();
 void* dispatcherModule();
 void displayGreeting();
 void displayHelp();
+void displayRunHelp();
+void displayListHelp();
+void displayFcfsHelp();
+void displaySjfHelp();
+void displayPriorityHelp();
+void displayTestHelp();
+void displayQuitHelp();
 void init();
 void parseUserCommand(char* userCommand);
 char* cleanCommand(char* cmd);
@@ -242,24 +249,52 @@ void displayGreeting() {
 }
 
 void displayHelp() {
-    printf("\trun <job> <time> <pri>: submit a job named <job>,\n");
-    printf("\t\t\t\texecution time is <time>,\n");
+    displayRunHelp();
+    displayListHelp();
+    displayFcfsHelp();
+    displaySjfHelp();
+    displayPriorityHelp();
+    displayTestHelp();
+    displayQuitHelp();
+}
+
+void displayRunHelp() {
+    printf("\trun <job> <time> <pri>: submit a job named <job>, \n");
+    printf("\t\t\t\texecution time is <time>, \n");
     printf("\t\t\t\tpriority time is <pri>\n\n");
+}
+
+void displayListHelp() {
     printf("\tlist: display the job status.\n\n");
+}
+
+void displayFcfsHelp() {
     printf("\tfcfs: change the scheduling policy to FCFS.\n\n");
+}
+
+void displaySjfHelp() {
     printf("\tsjf: change the scheduling policy to SJF.\n\n");
+}
+
+void displayPriorityHelp() {
     printf("\tpriority: change the scheduling policy to priority.\n\n");
+}
+
+void displayTestHelp() {
     printf("\ttest <benchmark> <policy> <num_of_jobs> <priority_levels>\n\n");
     printf("\t\t<min_cpu_time> <max_cpu_time>\n\n");
+}
+
+void displayQuitHelp() {
     printf("\tquit: exit AUbatch\n\n");
 }
 
 void parseUserCommand(char* user_command) {
 
     // tokenize the command and start taking action based on the tokens 
-    char* base_command = strtok(user_command, " ");  
+    char* command = strtok(user_command, " "); 
 
-    char* cleaned_command = cleanCommand(base_command);    
+    char* cleaned_command = cleanCommand(command);    
 
     if(strcmp(cleaned_command, "quit") == 0) {
         quit_flag = 1;
@@ -267,7 +302,31 @@ void parseUserCommand(char* user_command) {
         // happen to be waiting still
         pthread_cond_broadcast(&queue_condition);
     } else if(strcmp(cleaned_command, "help") == 0) {
-        displayHelp();
+        command = strtok(NULL, " ");
+        if(command == NULL) {
+            displayHelp();
+        } else {
+            cleaned_command = cleanCommand(command);
+            if(strcmp(cleaned_command, "-run") == 0){
+                displayRunHelp();
+            } else if(strcmp(cleaned_command, "-list") == 0) {
+                displayListHelp();
+            } else if(strcmp(cleaned_command, "-fcfs") == 0) {
+                displayFcfsHelp();
+            } else if(strcmp(cleaned_command, "-sjf") == 0) {
+                displaySjfHelp();
+            } else if(strcmp(cleaned_command, "-priority") == 0) {
+                displayPriorityHelp();
+            } else if(strcmp(cleaned_command, "-test") == 0) {
+                displayTestHelp();
+            } else if(strcmp(cleaned_command, "-quit") == 0) {
+                displayQuitHelp();
+            } else {
+                fprintf(stderr, "Error: Command not found. Make sure you are passing the '-' char with your command you need help with.\n");
+                fprintf(stderr, "Example: help -test\n");
+            }
+        }
+
     } else if(strcmp(cleaned_command, "test") == 0) {
         user_job.job_name = "sampleProgram";
         user_job.arg_list[0] = user_job.job_name;
