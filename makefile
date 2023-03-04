@@ -1,2 +1,19 @@
+CC=gcc
+
+CFLAGS=-g
+
+INCLUDES=-I./include
+
+LIBINCLUDES=-lpthread
+
+INC=$(INCLUDES) $(LIBINCLUDES)
+
+SRC=./src/
+
+OUT=-o ./bin/
+
 build:
-	gcc -g -lpthread -o aubatch aubatch.c 
+	$(CC) $(CFLAGS) $(INC) $(OUT)aubatch $(SRC)aubatch.c $(SRC)menu.c
+
+sampleProgram:
+	$(CC) $(CFLAGS) $(INC) $(OUT)sampleProgram $(SRC)sampleProgram.c
