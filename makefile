@@ -10,13 +10,11 @@ INC=$(INCLUDES) $(LIBINCLUDES)
 
 SRC=./src/
 
-OUT=-o ./bin/
-
 build:
-	$(CC) $(CFLAGS) $(INC) $(OUT)aubatch $(SRC)aubatch.c $(SRC)menu.c
+	$(CC) $(CFLAGS) $(INC) -o aubatch $(SRC)aubatch.c $(SRC)menu.c
 
 sampleProgram:
-	$(CC) $(CFLAGS) $(INC) $(OUT)sampleProgram $(SRC)sampleProgram.c
+	$(CC) $(CFLAGS) $(INC) -o sampleProgram $(SRC)sampleProgram.c
 
 batch:
-	$(CC) $(CFLAGS) $(INC) $(OUT)batch_job $(SRC)batch_job.c
+	$(CC) $(CFLAGS) $(INC) -o batch_job $(SRC)batch_job.c

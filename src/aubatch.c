@@ -272,13 +272,46 @@ void parseUserCommand(char* user_command) {
             }
         }
 
-    } else if(strcmp(cleaned_command, "test") == 0) {
-        user_job.job_name = "sampleProgram";
-        user_job.arg_list[0] = user_job.job_name;
-        user_job.est_run_time = 10;
-        user_job.priority = 0;
-        scheduler.job_cache = &user_job;
-        printf("Job submitted\n");
+    } else if(strcmp(cleaned_command, "run") == 0) {
+        //user_job.job_name = "sampleProgram";
+        //user_job.arg_list[0] = user_job.job_name;
+        //user_job.est_run_time = 10;
+        //user_job.priority = 0;
+        //scheduler.job_cache = &user_job;
+        //printf("Job submitted\n");
+
+        command = strtok(NULL, " ");
+        if(command == NULL) {
+            fprintf(stderr, "ERROR: You must specify a file to run.\n");
+            displayRunHelp();
+        } else {
+            // program name
+            cleaned_command = cleanCommand(command);
+            user_job.job_name = cleaned_command;
+            
+            command = strtok(NULL, " ");
+            if(command == NULL) {
+                fprintf(stderr, "ERROR: You must specify an estimated runtime length for the given file.\n");
+                displayRunHelp();
+            } else {
+                cleaned_command = cleanCommand(command);
+                user_job.est_run_time = atoi(cleaned_command);
+                
+                command = strtok(NULL, " ");
+                if(command == NULL) {
+                    fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
+                    displayRunHelp();
+                } else {
+                    cleaned_command = cleanCommand(command);
+                    user_job.priority = atoi(cleaned_command);
+                
+                    printf("---\tJOB\t---\n");
+                    printf("Job name: %s\n", user_job.job_name);
+                    printf("Job Est Run Time: %i\n", user_job.est_run_time);
+                    printf("Job Priority: %i\n", user_job.priority);
+                }
+            }
+        }
     }else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
