@@ -1,4 +1,10 @@
+#include <stdio.h>
 #include <menu.h>
+
+void displayGreeting() {
+    printf("Welcome to Joshua Boyd's batch job scheduler Version 1.0\n");
+    printf("Type 'help' to find more about AUbatch commands\n");
+}
 
 void displayHelp() {
     displayRunHelp();
