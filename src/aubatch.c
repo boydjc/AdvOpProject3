@@ -198,20 +198,9 @@ void* dispatcherModule(void* ptr) {
         pthread_mutex_lock(&queue_mutex);     
         if(job_queue.queue[dispatcher.queue_tail] != NULL) {
             printf("Dispatcher detected job in queue\n");
-            printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
             Job* job = job_queue.queue[dispatcher.queue_tail];
-            job_queue.queue[dispatcher.queue_tail] = NULL;
-            job_queue.queue_job_num--;
             pthread_mutex_unlock(&queue_mutex);
             printf("\tJob was: %s\n", job->job_name); 
-            
-            if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
-                dispatcher.queue_tail = 0;
-            } else {
-                dispatcher.queue_tail++;
-            }
-
-            printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
 
             pid_t pid;
             pid = fork();
@@ -225,6 +214,18 @@ void* dispatcherModule(void* ptr) {
                     break;
                 default:
                     pid = wait(NULL);
+                    pthread_mutex_lock(&queue_mutex);
+                    job_queue.queue[dispatcher.queue_tail] = NULL;
+                    job_queue.queue_job_num--;
+                    pthread_mutex_unlock(&queue_mutex);
+
+                    printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);                  
+                    if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
+                        dispatcher.queue_tail = 0;
+                    } else {
+                        dispatcher.queue_tail++;
+                    }    
+                    printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
                     break;
             }           
         }
@@ -273,13 +274,6 @@ void parseUserCommand(char* user_command) {
         }
 
     } else if(strcmp(cleaned_command, "run") == 0) {
-        //user_job.job_name = "sampleProgram";
-        //user_job.arg_list[0] = user_job.job_name;
-        //user_job.est_run_time = 10;
-        //user_job.priority = 0;
-        //scheduler.job_cache = &user_job;
-        //printf("Job submitted\n");
-
         command = strtok(NULL, " ");
         if(command == NULL) {
             fprintf(stderr, "ERROR: You must specify a file to run.\n");
@@ -288,6 +282,7 @@ void parseUserCommand(char* user_command) {
             // program name
             cleaned_command = cleanCommand(command);
             user_job.job_name = cleaned_command;
+            user_job.arg_list[0] = user_job.job_name;
             
             command = strtok(NULL, " ");
             if(command == NULL) {
@@ -296,7 +291,7 @@ void parseUserCommand(char* user_command) {
             } else {
                 cleaned_command = cleanCommand(command);
                 user_job.est_run_time = atoi(cleaned_command);
-                
+                //user_job.arg_list[1] = cleaned_command;
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
@@ -304,7 +299,9 @@ void parseUserCommand(char* user_command) {
                 } else {
                     cleaned_command = cleanCommand(command);
                     user_job.priority = atoi(cleaned_command);
-                
+
+                    scheduler.job_cache = &user_job;
+                    printf("Job %s was submitted\n.", user_job.job_name);                
                     printf("---\tJOB\t---\n");
                     printf("Job name: %s\n", user_job.job_name);
                     printf("Job Est Run Time: %i\n", user_job.est_run_time);
@@ -312,7 +309,10 @@ void parseUserCommand(char* user_command) {
                 }
             }
         }
-    }else {
+    } else if(strcmp(cleaned_command, "list") == 0) {
+        printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
+        printf("Scheduling Policy: %s\n", scheduler.policy);
+    } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
 
@@ -335,3 +335,4 @@ char* cleanCommand(char* cmd) {
 
     return cmd;
 }
+
