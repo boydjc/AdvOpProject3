@@ -17,3 +17,6 @@ build:
 
 sampleProgram:
 	$(CC) $(CFLAGS) $(INC) $(OUT)sampleProgram $(SRC)sampleProgram.c
+
+batch:
+	$(CC) $(CFLAGS) $(INC) $(OUT)batch_job $(SRC)batch_job.c
