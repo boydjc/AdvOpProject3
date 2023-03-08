@@ -316,8 +316,11 @@ void parseUserCommand(char* user_command) {
                     scheduler.job_cache.priority = atoi(cleaned_command);
 
                     printf("Job %s was submitted\n", scheduler.job_cache.job_name);
-                    printf("Job Est Run Time: %i\n", scheduler.job_cache.est_run_time);
-                    printf("Job Priority: %i\n", scheduler.job_cache.priority);                   
+                    pthread_mutex_lock(&queue_mutex);
+                    printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
+                    pthread_mutex_unlock(&queue_mutex);
+                    printf("Expected waiting time: !!!TODO!!!\n");
+                    printf("Scheduling Policy: %s\n", scheduler.policy);
  
                     // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
@@ -329,6 +332,15 @@ void parseUserCommand(char* user_command) {
     } else if(strcmp(cleaned_command, "list") == 0) {
         pthread_mutex_lock(&queue_mutex);
         printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
+        int job_count;
+        printf("Name\t\tCPU_TIME\tPRI\tArrival_time\tProgress\n");
+        for(job_count=0; job_count<job_queue.queue_job_num; job_count++) {
+            printf("%.8s\t%i\t\t%i\t%s\t\t%s\n", job_queue.queue[job_count].job_name, 
+                                                 job_queue.queue[job_count].est_run_time,
+                                                 job_queue.queue[job_count].priority,
+                                                 "TODO",
+                                                 "TODO"); 
+        }
         pthread_mutex_unlock(&queue_mutex);
         printf("Scheduling Policy: %s\n", scheduler.policy);
     } else if(strcmp(cleaned_command, "job") == 0) {
@@ -347,6 +359,15 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_unlock(&scheduler_condition_mutex);
        
         
+    } else if(strcmp(cleaned_command, "fcfs") == 0) {
+        scheduler.policy = "FCFS";
+        printf("Scheduling policy has been switched to FCFS.\n"); 
+    } else if(strcmp(cleaned_command, "sjf") == 0) {
+        scheduler.policy = "SJF";
+        printf("Scheduling policy has been switched to SJF.\n");
+    } else if(strcmp(cleaned_command, "priority") == 0) {
+        scheduler.policy = "Priority";
+        printf("Scheduling policy has been switched to Priority.\n");
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
