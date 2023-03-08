@@ -26,7 +26,7 @@ typedef struct Scheduler {
     char* policy;
     int queue_head;
 
-    Job* job_cache;
+    Job job_cache;
 } Scheduler;
 
 typedef struct Dispatcher {
@@ -34,7 +34,7 @@ typedef struct Dispatcher {
 } Dispatcher;
 
 typedef struct JobQueue {
-    Job* queue[JOB_QUEUE_MAX_SIZE];
+    Job queue[JOB_QUEUE_MAX_SIZE];
     int queue_job_num;
 } JobQueue;
 
@@ -56,9 +56,12 @@ char* cleanCommand(char* cmd);
  *                                             *
  ***********************************************/
 
-pthread_cond_t queue_condition = PTHREAD_COND_INITIALIZER;
+pthread_cond_t scheduler_queue_condition = PTHREAD_COND_INITIALIZER;
+pthread_cond_t dispatcher_queue_condition = PTHREAD_COND_INITIALIZER;
 
-pthread_mutex_t condition_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t scheduler_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t dispatcher_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 /*****************
@@ -131,15 +134,9 @@ void init() {
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
-    scheduler.job_cache = NULL;
-
+ 
     dispatcher.queue_tail = 0;
-
-    int i;
-    for(i=0; i<JOB_QUEUE_MAX_SIZE; i++) {
-        job_queue.queue[i] = NULL;
-    }
-
+    
     job_queue.queue_job_num = 0;      
 }
 
@@ -147,15 +144,17 @@ void* schedulerModule(void* ptr) {
     //printf("Scheduler is online and waiting...\n");
 
     while(quit_flag != 1) {
-        pthread_mutex_lock(&condition_mutex);
-        if(job_queue.queue_job_num >= JOB_QUEUE_MAX_SIZE) {
-            pthread_cond_wait(&queue_condition, &condition_mutex);  
-        }
-        pthread_mutex_unlock(&condition_mutex);
+        pthread_mutex_lock(&scheduler_condition_mutex);
+        pthread_cond_wait(&scheduler_queue_condition, &scheduler_condition_mutex);  
+        pthread_mutex_unlock(&scheduler_condition_mutex);
         
-        if(scheduler.job_cache != NULL) {
+        int num_of_jobs = 0;
+        pthread_mutex_lock(&queue_mutex);
+        num_of_jobs = job_queue.queue_job_num;
+        pthread_mutex_unlock(&queue_mutex);
 
-            printf("Scheduler detected job in pool\n");
+        if(quit_flag != 1) {
+            printf("Scheduler inserting job\n");
             printf("\tScheduler head value before inserting job: %i\n", scheduler.queue_head);
             pthread_mutex_lock(&queue_mutex);
             printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
@@ -163,7 +162,6 @@ void* schedulerModule(void* ptr) {
             job_queue.queue_job_num++;
             printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
             pthread_mutex_unlock(&queue_mutex);
-            scheduler.job_cache = NULL;
 
             if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE-1) {
                 scheduler.queue_head = 0;
@@ -174,10 +172,9 @@ void* schedulerModule(void* ptr) {
             printf("\tScheduler head value after inserting job: %i\n", scheduler.queue_head);
 
             // signal to the dispatcher
-            pthread_mutex_lock(&condition_mutex);
-            pthread_cond_signal(&queue_condition);
-            pthread_mutex_unlock(&condition_mutex);
-
+            pthread_mutex_lock(&dispatcher_condition_mutex);
+            pthread_cond_signal(&dispatcher_queue_condition);
+            pthread_mutex_unlock(&dispatcher_condition_mutex);
         }         
     }
 
@@ -189,46 +186,59 @@ void* dispatcherModule(void* ptr) {
     //printf("Dispatcher is online and waiting...\n");
 
     while(quit_flag != 1) {
-        pthread_mutex_lock(&condition_mutex);
+        pthread_mutex_lock(&dispatcher_condition_mutex);
         if(job_queue.queue_job_num <= 0) {
-            pthread_cond_wait(&queue_condition, &condition_mutex);
+            pthread_cond_wait(&dispatcher_queue_condition, &dispatcher_condition_mutex);
         }
-        pthread_mutex_unlock(&condition_mutex);
+        pthread_mutex_unlock(&dispatcher_condition_mutex);
+        
+        int num_of_jobs = 0;
+        pthread_mutex_lock(&queue_mutex);
+        num_of_jobs = job_queue.queue_job_num;
+        pthread_mutex_unlock(&queue_mutex);
 
-        pthread_mutex_lock(&queue_mutex);     
-        if(job_queue.queue[dispatcher.queue_tail] != NULL) {
+        if(num_of_jobs != 0 && num_of_jobs < JOB_QUEUE_MAX_SIZE) {
+            pthread_mutex_lock(&queue_mutex);
             printf("Dispatcher detected job in queue\n");
-            Job* job = job_queue.queue[dispatcher.queue_tail];
+            Job job = job_queue.queue[dispatcher.queue_tail];
             pthread_mutex_unlock(&queue_mutex);
-            printf("\tJob was: %s\n", job->job_name); 
 
-            pid_t pid;
-            pid = fork();
+            job.arg_list[0] = "sampleProgram";
+            job.arg_list[1] = NULL;
+
+            if(job.job_name) {
+
+                printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
+                if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
+                    dispatcher.queue_tail = 0;
+                } else {
+                    dispatcher.queue_tail++;
+                }
+                printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
+
+                pid_t pid;
+                pid = fork();
   
-            switch(pid) {
-                case -1:
-                    perror("fork");
-                    break;
-                case 0:
-                    execv(job->job_name, job->arg_list);
-                    break;
-                default:
-                    pid = wait(NULL);
-                    pthread_mutex_lock(&queue_mutex);
-                    job_queue.queue[dispatcher.queue_tail] = NULL;
-                    job_queue.queue_job_num--;
-                    pthread_mutex_unlock(&queue_mutex);
+                switch(pid) {
+                    case -1:
+                        perror("fork");
+                        break;
+                    case 0:
+                        execv(job.job_name, job.arg_list);
+                        perror("execv");
+                        printf("\tJob was: %s\n", job.job_name);
+                        exit(EXIT_FAILURE);
+                        break;
+                    default:
+                        pid = wait(NULL);
+                        pthread_mutex_lock(&queue_mutex);
+                        job_queue.queue_job_num--;
+                        pthread_mutex_unlock(&queue_mutex);
+                        break;
+                }
 
-                    printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);                  
-                    if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
-                        dispatcher.queue_tail = 0;
-                    } else {
-                        dispatcher.queue_tail++;
-                    }    
-                    printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
-                    break;
-            }           
-        }
+            }
+        }           
     }
 
     printf("Dispatcher Done\n");
@@ -244,9 +254,14 @@ void parseUserCommand(char* user_command) {
 
     if(strcmp(cleaned_command, "quit") == 0) {
         quit_flag = 1;
-        // after setting the quit flag, broadcast to the other threads in case they
-        // happen to be waiting still
-        pthread_cond_broadcast(&queue_condition);
+        // after setting the quit flag, signal to both threads one more time in case they are waiting
+        pthread_mutex_lock(&scheduler_condition_mutex);
+        pthread_cond_signal(&scheduler_queue_condition);
+        pthread_mutex_unlock(&scheduler_condition_mutex);
+       
+        pthread_mutex_lock(&dispatcher_condition_mutex);
+        pthread_cond_signal(&dispatcher_queue_condition);
+        pthread_mutex_unlock(&dispatcher_condition_mutex);
     } else if(strcmp(cleaned_command, "help") == 0) {
         command = strtok(NULL, " ");
         if(command == NULL) {
@@ -281,8 +296,8 @@ void parseUserCommand(char* user_command) {
         } else {
             // program name
             cleaned_command = cleanCommand(command);
-            user_job.job_name = cleaned_command;
-            user_job.arg_list[0] = user_job.job_name;
+            scheduler.job_cache.job_name = cleaned_command;
+            scheduler.job_cache.arg_list[0] = user_job.job_name;
             
             command = strtok(NULL, " ");
             if(command == NULL) {
@@ -290,28 +305,48 @@ void parseUserCommand(char* user_command) {
                 displayRunHelp();
             } else {
                 cleaned_command = cleanCommand(command);
-                user_job.est_run_time = atoi(cleaned_command);
-                //user_job.arg_list[1] = cleaned_command;
+                scheduler.job_cache.est_run_time = atoi(cleaned_command);
+                scheduler.job_cache.arg_list[1] = NULL;
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
                     displayRunHelp();
                 } else {
                     cleaned_command = cleanCommand(command);
-                    user_job.priority = atoi(cleaned_command);
+                    scheduler.job_cache.priority = atoi(cleaned_command);
 
-                    scheduler.job_cache = &user_job;
-                    printf("Job %s was submitted\n.", user_job.job_name);                
-                    printf("---\tJOB\t---\n");
-                    printf("Job name: %s\n", user_job.job_name);
-                    printf("Job Est Run Time: %i\n", user_job.est_run_time);
-                    printf("Job Priority: %i\n", user_job.priority);
+                    printf("Job %s was submitted\n", scheduler.job_cache.job_name);
+                    printf("Job Est Run Time: %i\n", scheduler.job_cache.est_run_time);
+                    printf("Job Priority: %i\n", scheduler.job_cache.priority);                   
+ 
+                    // signal to scheduler and let it know we are ready for it to process the job
+                    pthread_mutex_lock(&scheduler_condition_mutex);
+                    pthread_cond_signal(&scheduler_queue_condition);
+                    pthread_mutex_unlock(&scheduler_condition_mutex);
                 }
             }
         }
     } else if(strcmp(cleaned_command, "list") == 0) {
+        pthread_mutex_lock(&queue_mutex);
         printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
+        pthread_mutex_unlock(&queue_mutex);
         printf("Scheduling Policy: %s\n", scheduler.policy);
+    } else if(strcmp(cleaned_command, "job") == 0) {
+        scheduler.job_cache.job_name = "sampleProgram";
+        scheduler.job_cache.arg_list[0] = user_job.job_name;
+        scheduler.job_cache.arg_list[1] = NULL;
+        scheduler.job_cache.priority = 2;
+        scheduler.job_cache.est_run_time = 2;
+
+        printf("Job %s was submitted.\n", scheduler.job_cache.job_name);
+        printf("Job Est Run Time: %i\n", scheduler.job_cache.est_run_time);
+        printf("Job Priority: %i\n", scheduler.job_cache.priority);        
+
+        pthread_mutex_lock(&scheduler_condition_mutex);
+        pthread_cond_signal(&scheduler_queue_condition);
+        pthread_mutex_unlock(&scheduler_condition_mutex);
+       
+        
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
