@@ -20,6 +20,7 @@ typedef struct Job {
     char* job_name;
     int est_run_time;
     int priority;
+    int is_running;
     char* arg_list[20];
 } Job;
 
@@ -64,6 +65,7 @@ pthread_mutex_t scheduler_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t dispatcher_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t dispatcher_mutex = PTHREAD_MUTEX_INITIALIZER; // for accessing dispatcher tail from main thread
 
 /*****************
  *               *
@@ -202,10 +204,12 @@ void* dispatcherModule(void* ptr) {
             pthread_mutex_lock(&queue_mutex);
             printf("Dispatcher detected job in queue\n");
             Job job = job_queue.queue[dispatcher.queue_tail];
+            job_queue.queue[dispatcher.queue_tail].is_running = 1;
             pthread_mutex_unlock(&queue_mutex);
 
             if(job.job_name) {
 
+                pthread_mutex_lock(&dispatcher_mutex);
                 printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
                 if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
                     dispatcher.queue_tail = 0;
@@ -213,6 +217,7 @@ void* dispatcherModule(void* ptr) {
                     dispatcher.queue_tail++;
                 }
                 printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
+                pthread_mutex_unlock(&dispatcher_mutex);
 
                 pid_t pid;
                 pid = fork();
@@ -304,7 +309,6 @@ void parseUserCommand(char* user_command) {
             } else {
                 cleaned_command = cleanCommand(command);
                 user_job.est_run_time = atoi(cleaned_command);
-                user_job.arg_list[1] = NULL;
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
@@ -312,6 +316,7 @@ void parseUserCommand(char* user_command) {
                 } else {
                     cleaned_command = cleanCommand(command);
                     user_job.priority = atoi(cleaned_command);
+                    user_job.is_running = 0;
 
                     printf("Job %s was submitted\n", user_job.job_name);
                     pthread_mutex_lock(&queue_mutex);
@@ -334,13 +339,29 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_lock(&queue_mutex);
         printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
         int job_count;
+        int job_index;        
+
+        pthread_mutex_lock(&dispatcher_mutex); 
+        if(dispatcher.queue_tail == 0) {
+            job_index = JOB_QUEUE_MAX_SIZE-1;
+        } else {
+            job_index = dispatcher.queue_tail-1;
+        }
+        pthread_mutex_unlock(&dispatcher_mutex);
+
         printf("Name\t\tCPU_TIME\tPRI\tArrival_time\tProgress\n");
         for(job_count=0; job_count<job_queue.queue_job_num; job_count++) {
-            printf("%.8s\t%i\t\t%i\t%s\t\t%s\n", job_queue.queue[job_count].job_name, 
-                                                 job_queue.queue[job_count].est_run_time,
-                                                 job_queue.queue[job_count].priority,
+            printf("%.8s\t%i\t\t%i\t%s\t\t%i\n", job_queue.queue[job_index].job_name, 
+                                                 job_queue.queue[job_index].est_run_time,
+                                                 job_queue.queue[job_index].priority,
                                                  "TODO",
-                                                 "TODO"); 
+                                                 job_queue.queue[job_index].is_running); 
+
+            if(job_index >= JOB_QUEUE_MAX_SIZE-1) {
+                job_index = 0;
+            } else {
+                job_index++;
+            }
         }
         pthread_mutex_unlock(&queue_mutex);
         printf("Scheduling Policy: %s\n", scheduler.policy);   
