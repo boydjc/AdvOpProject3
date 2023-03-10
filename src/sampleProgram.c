@@ -11,7 +11,7 @@ int main(int argc, char *argv[] )
     argc--;
   }
 
-  sleep(5);
+  sleep(20);
 
   printf("Process is done\n");
 

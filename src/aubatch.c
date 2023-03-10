@@ -8,6 +8,7 @@
 #include <menu.h>
 
 #define JOB_QUEUE_MAX_SIZE 10
+#define MAX_JOB_ARGS 20
 
 /*******************
  *                 *
@@ -19,7 +20,7 @@ typedef struct Job {
     char* job_name;
     int est_run_time;
     int priority;
-    char* arg_list[];
+    char* arg_list[20];
 } Job;
 
 typedef struct Scheduler {
@@ -203,9 +204,6 @@ void* dispatcherModule(void* ptr) {
             Job job = job_queue.queue[dispatcher.queue_tail];
             pthread_mutex_unlock(&queue_mutex);
 
-            job.arg_list[0] = "sampleProgram";
-            job.arg_list[1] = NULL;
-
             if(job.job_name) {
 
                 printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
@@ -218,7 +216,7 @@ void* dispatcherModule(void* ptr) {
 
                 pid_t pid;
                 pid = fork();
-  
+ 
                 switch(pid) {
                     case -1:
                         perror("fork");
@@ -296,8 +294,8 @@ void parseUserCommand(char* user_command) {
         } else {
             // program name
             cleaned_command = cleanCommand(command);
-            scheduler.job_cache.job_name = cleaned_command;
-            scheduler.job_cache.arg_list[0] = user_job.job_name;
+            user_job.job_name = strdup(cleaned_command);
+            user_job.arg_list[0] = strdup(cleaned_command);
             
             command = strtok(NULL, " ");
             if(command == NULL) {
@@ -305,23 +303,26 @@ void parseUserCommand(char* user_command) {
                 displayRunHelp();
             } else {
                 cleaned_command = cleanCommand(command);
-                scheduler.job_cache.est_run_time = atoi(cleaned_command);
-                scheduler.job_cache.arg_list[1] = NULL;
+                user_job.est_run_time = atoi(cleaned_command);
+                user_job.arg_list[1] = NULL;
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
                     displayRunHelp();
                 } else {
                     cleaned_command = cleanCommand(command);
-                    scheduler.job_cache.priority = atoi(cleaned_command);
+                    user_job.priority = atoi(cleaned_command);
 
-                    printf("Job %s was submitted\n", scheduler.job_cache.job_name);
+                    printf("Job %s was submitted\n", user_job.job_name);
                     pthread_mutex_lock(&queue_mutex);
                     printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
                     pthread_mutex_unlock(&queue_mutex);
+                    
+                    scheduler.job_cache = user_job;
+
                     printf("Expected waiting time: !!!TODO!!!\n");
-                    printf("Scheduling Policy: %s\n", scheduler.policy);
- 
+                    printf("Scheduling Policy: %s\n", scheduler.policy); 
+
                     // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
@@ -342,23 +343,8 @@ void parseUserCommand(char* user_command) {
                                                  "TODO"); 
         }
         pthread_mutex_unlock(&queue_mutex);
-        printf("Scheduling Policy: %s\n", scheduler.policy);
-    } else if(strcmp(cleaned_command, "job") == 0) {
-        scheduler.job_cache.job_name = "sampleProgram";
-        scheduler.job_cache.arg_list[0] = user_job.job_name;
-        scheduler.job_cache.arg_list[1] = NULL;
-        scheduler.job_cache.priority = 2;
-        scheduler.job_cache.est_run_time = 2;
-
-        printf("Job %s was submitted.\n", scheduler.job_cache.job_name);
-        printf("Job Est Run Time: %i\n", scheduler.job_cache.est_run_time);
-        printf("Job Priority: %i\n", scheduler.job_cache.priority);        
-
-        pthread_mutex_lock(&scheduler_condition_mutex);
-        pthread_cond_signal(&scheduler_queue_condition);
-        pthread_mutex_unlock(&scheduler_condition_mutex);
+        printf("Scheduling Policy: %s\n", scheduler.policy);   
        
-        
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
         scheduler.policy = "FCFS";
         printf("Scheduling policy has been switched to FCFS.\n"); 
@@ -386,7 +372,7 @@ char* cleanCommand(char* cmd) {
             letter_count++;
         }       
     }
-
+    
     cmd[letter_count] = '\0';
 
     return cmd;
