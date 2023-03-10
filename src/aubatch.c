@@ -4,6 +4,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <string.h>
+#include <time.h>
 
 #include <menu.h>
 
@@ -20,6 +21,8 @@ typedef struct Job {
     char* job_name;
     int est_run_time;
     int priority;
+    time_t unix_seconds;
+    struct tm arrival_time;
     int is_running;
     char* arg_list[20];
 } Job;
@@ -141,6 +144,7 @@ void init() {
     dispatcher.queue_tail = 0;
     
     job_queue.queue_job_num = 0;      
+    
 }
 
 void* schedulerModule(void* ptr) {
@@ -316,6 +320,8 @@ void parseUserCommand(char* user_command) {
                 } else {
                     cleaned_command = cleanCommand(command);
                     user_job.priority = atoi(cleaned_command);
+                    user_job.unix_seconds = time(NULL);
+                    localtime_r(&user_job.unix_seconds, &user_job.arrival_time);
                     user_job.is_running = 0;
 
                     printf("Job %s was submitted\n", user_job.job_name);
@@ -351,10 +357,12 @@ void parseUserCommand(char* user_command) {
 
         printf("Name\t\tCPU_TIME\tPRI\tArrival_time\tProgress\n");
         for(job_count=0; job_count<job_queue.queue_job_num; job_count++) {
-            printf("%.8s\t%i\t\t%i\t%s\t\t", job_queue.queue[job_index].job_name, 
-                                                 job_queue.queue[job_index].est_run_time,
-                                                 job_queue.queue[job_index].priority,
-                                                 "TODO");
+            printf("%.8s\t%i\t\t%i\t%02d:%02d:%02d\t", job_queue.queue[job_index].job_name, 
+                                                       job_queue.queue[job_index].est_run_time,
+                                                       job_queue.queue[job_index].priority,
+                                                       job_queue.queue[job_index].arrival_time.tm_hour,
+                                                       job_queue.queue[job_index].arrival_time.tm_min,
+                                                       job_queue.queue[job_index].arrival_time.tm_sec);
 
             if(job_queue.queue[job_index].is_running == 1) {
                 printf("%s\n", "Running");
