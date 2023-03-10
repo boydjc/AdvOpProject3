@@ -351,11 +351,16 @@ void parseUserCommand(char* user_command) {
 
         printf("Name\t\tCPU_TIME\tPRI\tArrival_time\tProgress\n");
         for(job_count=0; job_count<job_queue.queue_job_num; job_count++) {
-            printf("%.8s\t%i\t\t%i\t%s\t\t%i\n", job_queue.queue[job_index].job_name, 
+            printf("%.8s\t%i\t\t%i\t%s\t\t", job_queue.queue[job_index].job_name, 
                                                  job_queue.queue[job_index].est_run_time,
                                                  job_queue.queue[job_index].priority,
-                                                 "TODO",
-                                                 job_queue.queue[job_index].is_running); 
+                                                 "TODO");
+
+            if(job_queue.queue[job_index].is_running == 1) {
+                printf("%s\n", "Running");
+            } else {
+                printf("\n");
+            }
 
             if(job_index >= JOB_QUEUE_MAX_SIZE-1) {
                 job_index = 0;
