@@ -29,6 +29,7 @@ typedef struct Job {
 
 typedef struct Scheduler {
     char* policy;
+    int expected_wait_time;
     int queue_head;
 
     Job job_cache;
@@ -69,6 +70,7 @@ pthread_mutex_t dispatcher_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_mutex_t queue_mutex = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t dispatcher_mutex = PTHREAD_MUTEX_INITIALIZER; // for accessing dispatcher tail from main thread
+pthread_mutex_t scheduler_mutex = PTHREAD_MUTEX_INITIALIZER; // for accessing expected wait time from dispatcher thread
 
 /*****************
  *               *
@@ -140,6 +142,7 @@ void init() {
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
+    scheduler.expected_wait_time = 0;
  
     dispatcher.queue_tail = 0;
     
@@ -241,6 +244,10 @@ void* dispatcherModule(void* ptr) {
                         pthread_mutex_lock(&queue_mutex);
                         job_queue.queue_job_num--;
                         pthread_mutex_unlock(&queue_mutex);
+
+                        pthread_mutex_lock(&scheduler_mutex);
+                        scheduler.expected_wait_time -= job.est_run_time;
+                        pthread_mutex_unlock(&scheduler_mutex);
                         break;
                 }
 
@@ -331,7 +338,10 @@ void parseUserCommand(char* user_command) {
                     
                     scheduler.job_cache = user_job;
 
-                    printf("Expected waiting time: !!!TODO!!!\n");
+                    pthread_mutex_lock(&scheduler_mutex);
+                    scheduler.expected_wait_time += user_job.est_run_time;
+                    printf("Expected waiting time: %i seconds\n", scheduler.expected_wait_time);
+                    pthread_mutex_unlock(&scheduler_mutex);
                     printf("Scheduling Policy: %s\n", scheduler.policy); 
 
                     // signal to scheduler and let it know we are ready for it to process the job
