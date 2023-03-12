@@ -349,6 +349,8 @@ void parseUserCommand(char* user_command) {
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
                     pthread_mutex_unlock(&scheduler_condition_mutex);
+
+                    //reallocateJobQueue(); 
                 }
             }
         }
@@ -396,9 +398,11 @@ void parseUserCommand(char* user_command) {
         printf("Scheduling policy has been switched to FCFS.\n"); 
     } else if(strcmp(cleaned_command, "sjf") == 0) {
         scheduler.policy = "SJF";
+        reallocateJobQueue();
         printf("Scheduling policy has been switched to SJF.\n");
     } else if(strcmp(cleaned_command, "priority") == 0) {
         scheduler.policy = "Priority";
+        reallocateJobQueue();
         printf("Scheduling policy has been switched to Priority.\n");
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
@@ -407,7 +411,7 @@ void parseUserCommand(char* user_command) {
 }
 
 
-/* decided to use selection sort here where the minimum value will be 
+/* decided to usei selection sort here where the minimum value will be 
  * dependent on what policy the scheduler is using. Doing it this 
  * way and having lower priority be more important will allow us to use
  * selection sort for each policy. */
@@ -430,13 +434,17 @@ void reallocateJobQueue() {
         pthread_mutex_lock(&dispatcher_mutex);
         job_index = dispatcher.queue_tail;
 
-        while(job_count <= job_queue.queue_job_num-1) {
+        while(job_count < job_queue.queue_job_num-1) {
 
             min_index = job_index;
             
             int job_sub_index;
             if(job_index == JOB_QUEUE_MAX_SIZE-1) {
-                job_sub_index = 0;
+                if(job_queue.queue[0].is_running) {
+                    job_sub_index = 1;
+                } else {
+                    job_sub_index = 0;
+                }
             } else { 
                 job_sub_index = job_index+1;
             }
@@ -444,15 +452,27 @@ void reallocateJobQueue() {
             int job_sub_count = job_count+1;
             while(job_sub_count <= job_queue.queue_job_num-2) {
 
-                // here is where we will split based on different policies TODO
                 printf("Minimum\n");
                 printf("Job name %s\t Job Priority: %i\n", new_queue[min_index].job_name, new_queue[min_index].priority);
                 printf("Compared to\n");
                 printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_sub_index].job_name, new_queue[job_sub_index].priority);
-                
-                if(new_queue[job_sub_index].priority < new_queue[min_index].priority) {
-                    min_index = job_sub_index;
+
+                // here is where we check based on on different policies               
+                pthread_mutex_lock(&scheduler_mutex);
+                if(strcmp(scheduler.policy, "Priority") == 0) {
+                    if(new_queue[job_sub_index].priority < new_queue[min_index].priority) {
+                        min_index = job_sub_index;
+                    }
+                } else if(strcmp(scheduler.policy, "FCFS") == 0) {
+                    if(new_queue[job_sub_index].unix_seconds < new_queue[min_index].unix_seconds) {
+                        min_index = job_sub_index;
+                    }
+                } else if(strcmp(scheduler.policy, "SJF") == 0) {
+                    if(new_queue[job_sub_index].est_run_time < new_queue[min_index].est_run_time) {
+                        min_index = job_sub_index;
+                    }
                 }
+                pthread_mutex_unlock(&scheduler_mutex);
 
                 if(job_sub_index == JOB_QUEUE_MAX_SIZE-1) {
                     job_sub_index = 0;
@@ -460,17 +480,17 @@ void reallocateJobQueue() {
                     job_sub_index++;
                 }
 
-                  
                 job_sub_count++;
+
             }
              
             // swap min and current index
             Job temp_job = new_queue[min_index];
-            /*printf("Minimum Job\n");
-            printf("Job name: %s\t Job Priority: %i\n", temp_job.job_name, temp_job.priority);
+            /*printf("\tMinimum Job\n");
+            printf("\tJob name: %s\t Job Priority: %i\n", temp_job.job_name, temp_job.priority);
 
-            printf("Swapped with\n");
-            printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_index].job_name, new_queue[job_index].priority);*/
+            printf("\tSwapped with\n");
+            printf("\tJob name: %s\t Job Priority: %i\n\n", new_queue[job_index].job_name, new_queue[job_index].priority);*/
 
             new_queue[min_index] = new_queue[job_index];
             new_queue[job_index] = temp_job; 
