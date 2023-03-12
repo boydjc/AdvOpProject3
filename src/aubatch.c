@@ -8,7 +8,7 @@
 
 #include <menu.h>
 
-#define JOB_QUEUE_MAX_SIZE 10
+#define JOB_QUEUE_MAX_SIZE 100
 #define MAX_JOB_ARGS 20
 
 /*******************
@@ -85,6 +85,7 @@ JobQueue job_queue;
 Job user_job;
 
 int quit_flag;
+int total_num_of_jobs;
 
 
 /**********************
@@ -140,6 +141,7 @@ int main() {
 void init() {
 
     quit_flag = 0;
+    total_num_of_jobs = 0;
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
@@ -165,13 +167,13 @@ void* schedulerModule(void* ptr) {
         pthread_mutex_unlock(&queue_mutex);
 
         if(quit_flag != 1) {
-            printf("Scheduler inserting job\n");
-            printf("\tScheduler head value before inserting job: %i\n", scheduler.queue_head);
+            //printf("Scheduler inserting job\n");
+            //printf("\tScheduler head value before inserting job: %i\n", scheduler.queue_head);
             pthread_mutex_lock(&queue_mutex);
-            printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
+            //printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
             job_queue.queue[scheduler.queue_head] = scheduler.job_cache;
             job_queue.queue_job_num++;
-            printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
+            //printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
             pthread_mutex_unlock(&queue_mutex);
 
             if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE-1) {
@@ -180,7 +182,9 @@ void* schedulerModule(void* ptr) {
                 scheduler.queue_head++;
             }
 
-            printf("\tScheduler head value after inserting job: %i\n", scheduler.queue_head);
+            //printf("\tScheduler head value after inserting job: %i\n", scheduler.queue_head);
+            
+            reallocateJobQueue();
 
             // signal to the dispatcher
             pthread_mutex_lock(&dispatcher_condition_mutex);
@@ -189,7 +193,7 @@ void* schedulerModule(void* ptr) {
         }         
     }
 
-    printf("Scheduler Done\n");
+    printf("Waiting for executing job to be done...\n");
  
 }
 
@@ -210,19 +214,19 @@ void* dispatcherModule(void* ptr) {
 
         if(num_of_jobs != 0 && num_of_jobs < JOB_QUEUE_MAX_SIZE) {
             pthread_mutex_lock(&queue_mutex);
-            printf("Dispatcher detected job in queue\n");
+            //printf("Dispatcher detected job in queue\n");
             Job job = job_queue.queue[dispatcher.queue_tail];
             job_queue.queue[dispatcher.queue_tail].is_running = 1;
             pthread_mutex_unlock(&queue_mutex);
 
             pthread_mutex_lock(&dispatcher_mutex);
-            printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
+            //printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
             if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
                 dispatcher.queue_tail = 0;
             } else {
                 dispatcher.queue_tail++;
             }
-            printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
+            //printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
             pthread_mutex_unlock(&dispatcher_mutex);
 
             if(job.job_name) {
@@ -236,7 +240,7 @@ void* dispatcherModule(void* ptr) {
                     case 0:
                         execv(job.job_name, job.arg_list);
                         perror("execv");
-                        printf("\tJob was: %s\n", job.job_name);
+                        //printf("\tJob was: %s\n", job.job_name);
                         exit(EXIT_FAILURE);
                         break;
                     default:
@@ -256,7 +260,7 @@ void* dispatcherModule(void* ptr) {
         }           
     }
 
-    printf("Dispatcher Done\n");
+    printf("Goodbye\n");
 
 }
 
@@ -277,6 +281,12 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_lock(&dispatcher_condition_mutex);
         pthread_cond_signal(&dispatcher_queue_condition);
         pthread_mutex_unlock(&dispatcher_condition_mutex);
+
+        printf("Total number of job submitted: %i\n", total_num_of_jobs);
+        printf("Average turnaround time: TODO\n");
+        printf("Average CPU time: TODO\n");
+        printf("Average waiting time: TODO\n");
+        printf("Throughput: TODO\n");
     } else if(strcmp(cleaned_command, "help") == 0) {
         command = strtok(NULL, " ");
         if(command == NULL) {
@@ -331,26 +341,27 @@ void parseUserCommand(char* user_command) {
                     user_job.unix_seconds = time(NULL);
                     localtime_r(&user_job.unix_seconds, &user_job.arrival_time);
                     user_job.is_running = 0;
-
-                    printf("Job %s was submitted\n", user_job.job_name);
-                    pthread_mutex_lock(&queue_mutex);
-                    printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
-                    pthread_mutex_unlock(&queue_mutex);
                     
                     scheduler.job_cache = user_job;
-
-                    pthread_mutex_lock(&scheduler_mutex);
-                    scheduler.expected_wait_time += user_job.est_run_time;
-                    printf("Expected waiting time: %i seconds\n", scheduler.expected_wait_time);
-                    pthread_mutex_unlock(&scheduler_mutex);
-                    printf("Scheduling Policy: %s\n", scheduler.policy); 
+                    total_num_of_jobs++;
 
                     // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
                     pthread_mutex_unlock(&scheduler_condition_mutex);
 
-                    //reallocateJobQueue(); 
+                    printf("Job %s was submitted\n", user_job.job_name);
+                    pthread_mutex_lock(&queue_mutex);
+                    printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
+                    pthread_mutex_unlock(&queue_mutex);
+
+
+                    pthread_mutex_lock(&scheduler_mutex);
+                    scheduler.expected_wait_time += user_job.est_run_time;
+                    printf("Expected waiting time: %i seconds\n", scheduler.expected_wait_time);
+                    pthread_mutex_unlock(&scheduler_mutex);
+                    printf("Scheduling Policy: %s\n", scheduler.policy);
+
                 }
             }
         }
@@ -411,7 +422,7 @@ void parseUserCommand(char* user_command) {
 }
 
 
-/* decided to usei selection sort here where the minimum value will be 
+/* decided to use something like selection sort here where the minimum value will be 
  * dependent on what policy the scheduler is using. Doing it this 
  * way and having lower priority be more important will allow us to use
  * selection sort for each policy. */
@@ -426,7 +437,7 @@ void reallocateJobQueue() {
     
     if(job_queue.queue_job_num > 1) {
 
-        printf("Reallocating job queue\n");
+        //printf("Reallocating job queue\n");
 
         // make a deep copy of the job_queue
         memcpy(new_queue, job_queue.queue, sizeof(job_queue.queue));
@@ -452,10 +463,10 @@ void reallocateJobQueue() {
             int job_sub_count = job_count+1;
             while(job_sub_count <= job_queue.queue_job_num-2) {
 
-                printf("Minimum\n");
-                printf("Job name %s\t Job Priority: %i\n", new_queue[min_index].job_name, new_queue[min_index].priority);
-                printf("Compared to\n");
-                printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_sub_index].job_name, new_queue[job_sub_index].priority);
+                //printf("Minimum\n");
+                //printf("Job name %s\t Job Priority: %i\n", new_queue[min_index].job_name, new_queue[min_index].priority);
+                //printf("Compared to\n");
+                //printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_sub_index].job_name, new_queue[job_sub_index].priority);
 
                 // here is where we check based on on different policies               
                 pthread_mutex_lock(&scheduler_mutex);
@@ -503,7 +514,6 @@ void reallocateJobQueue() {
 
 
             job_count++;
-            printf("------------------\n");
         }         
         pthread_mutex_unlock(&dispatcher_mutex);
         memcpy(job_queue.queue, new_queue, sizeof(new_queue));
