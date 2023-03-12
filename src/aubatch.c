@@ -55,6 +55,7 @@ void* dispatcherModule();
 void init();
 void parseUserCommand(char* userCommand);
 char* cleanCommand(char* cmd);
+void reallocateJobQueue();
 
 /***********************************************
  *                                             *
@@ -214,18 +215,17 @@ void* dispatcherModule(void* ptr) {
             job_queue.queue[dispatcher.queue_tail].is_running = 1;
             pthread_mutex_unlock(&queue_mutex);
 
+            pthread_mutex_lock(&dispatcher_mutex);
+            printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
+            if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
+                dispatcher.queue_tail = 0;
+            } else {
+                dispatcher.queue_tail++;
+            }
+            printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
+            pthread_mutex_unlock(&dispatcher_mutex);
+
             if(job.job_name) {
-
-                pthread_mutex_lock(&dispatcher_mutex);
-                printf("\tDispatcher tail value before grabbing job: %i\n", dispatcher.queue_tail);
-                if(dispatcher.queue_tail >= JOB_QUEUE_MAX_SIZE-1) {
-                    dispatcher.queue_tail = 0;
-                } else {
-                    dispatcher.queue_tail++;
-                }
-                printf("\tDispatcher tail value after grabbing job: %i\n", dispatcher.queue_tail);
-                pthread_mutex_unlock(&dispatcher_mutex);
-
                 pid_t pid;
                 pid = fork();
  
@@ -241,6 +241,7 @@ void* dispatcherModule(void* ptr) {
                         break;
                     default:
                         pid = wait(NULL);
+
                         pthread_mutex_lock(&queue_mutex);
                         job_queue.queue_job_num--;
                         pthread_mutex_unlock(&queue_mutex);
@@ -358,8 +359,8 @@ void parseUserCommand(char* user_command) {
         int job_index;        
 
         pthread_mutex_lock(&dispatcher_mutex); 
-        if(dispatcher.queue_tail == 0) {
-            job_index = JOB_QUEUE_MAX_SIZE-1;
+        if(dispatcher.queue_tail == JOB_QUEUE_MAX_SIZE-1) {
+            job_index = 0;
         } else {
             job_index = dispatcher.queue_tail-1;
         }
@@ -391,6 +392,7 @@ void parseUserCommand(char* user_command) {
        
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
         scheduler.policy = "FCFS";
+        reallocateJobQueue();
         printf("Scheduling policy has been switched to FCFS.\n"); 
     } else if(strcmp(cleaned_command, "sjf") == 0) {
         scheduler.policy = "SJF";
@@ -401,6 +403,94 @@ void parseUserCommand(char* user_command) {
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
+
+}
+
+
+/* decided to use selection sort here where the minimum value will be 
+ * dependent on what policy the scheduler is using. Doing it this 
+ * way and having lower priority be more important will allow us to use
+ * selection sort for each policy. */
+void reallocateJobQueue() {
+
+    Job new_queue[JOB_QUEUE_MAX_SIZE];
+
+    int job_count = 0;
+    int job_index, min_index;
+
+    pthread_mutex_lock(&queue_mutex);
+    
+    if(job_queue.queue_job_num > 1) {
+
+        printf("Reallocating job queue\n");
+
+        // make a deep copy of the job_queue
+        memcpy(new_queue, job_queue.queue, sizeof(job_queue.queue));
+
+        pthread_mutex_lock(&dispatcher_mutex);
+        job_index = dispatcher.queue_tail;
+
+        while(job_count <= job_queue.queue_job_num-1) {
+
+            min_index = job_index;
+            
+            int job_sub_index;
+            if(job_index == JOB_QUEUE_MAX_SIZE-1) {
+                job_sub_index = 0;
+            } else { 
+                job_sub_index = job_index+1;
+            }
+            
+            int job_sub_count = job_count+1;
+            while(job_sub_count <= job_queue.queue_job_num-2) {
+
+                // here is where we will split based on different policies TODO
+                printf("Minimum\n");
+                printf("Job name %s\t Job Priority: %i\n", new_queue[min_index].job_name, new_queue[min_index].priority);
+                printf("Compared to\n");
+                printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_sub_index].job_name, new_queue[job_sub_index].priority);
+                
+                if(new_queue[job_sub_index].priority < new_queue[min_index].priority) {
+                    min_index = job_sub_index;
+                }
+
+                if(job_sub_index == JOB_QUEUE_MAX_SIZE-1) {
+                    job_sub_index = 0;
+                } else {
+                    job_sub_index++;
+                }
+
+                  
+                job_sub_count++;
+            }
+             
+            // swap min and current index
+            Job temp_job = new_queue[min_index];
+            /*printf("Minimum Job\n");
+            printf("Job name: %s\t Job Priority: %i\n", temp_job.job_name, temp_job.priority);
+
+            printf("Swapped with\n");
+            printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_index].job_name, new_queue[job_index].priority);*/
+
+            new_queue[min_index] = new_queue[job_index];
+            new_queue[job_index] = temp_job; 
+
+            if(job_index == JOB_QUEUE_MAX_SIZE-1) {
+                job_index = 0;
+            } else {
+                job_index++;
+            }
+
+
+            job_count++;
+            printf("------------------\n");
+        }         
+        pthread_mutex_unlock(&dispatcher_mutex);
+        memcpy(job_queue.queue, new_queue, sizeof(new_queue));
+    }
+
+    pthread_mutex_unlock(&queue_mutex);
+    
 
 }
 
