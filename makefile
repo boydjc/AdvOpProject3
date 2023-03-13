@@ -11,7 +11,7 @@ INC=$(INCLUDES) $(LIBINCLUDES)
 SRC=./src/
 
 build:
-	$(CC) $(CFLAGS) $(INC) -o aubatch $(SRC)aubatch.c $(SRC)menu.c
+	$(CC) $(CFLAGS) $(INC) -o aubatch $(SRC)aubatch.c $(SRC)menu.c $(SRC)scheduler.c $(SRC)dispatcher.c $(SRC)job_queue.c $(SRC)job.c
 
 sampleProgram:
 	$(CC) $(CFLAGS) $(INC) -o sampleProgram $(SRC)sampleProgram.c
