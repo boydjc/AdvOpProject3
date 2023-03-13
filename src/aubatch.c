@@ -86,9 +86,14 @@ Job user_job;
 
 int quit_flag;
 int total_num_of_jobs;
+int total_completed_jobs;
 
-int total_turnaround_time;
-int average_turnaround_time;
+
+float total_turnaround_time;
+float average_turnaround_time;
+
+float total_wait_time;
+float average_wait_time;
 
 
 /**********************
@@ -147,6 +152,7 @@ void init() {
     total_num_of_jobs = 0;
     total_turnaround_time = 0;
     average_turnaround_time = 0;
+    total_completed_jobs = 0;
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
@@ -251,17 +257,18 @@ void* dispatcherModule(void* ptr) {
                         break;
                     default:
                         pid = wait(NULL);
+                        total_completed_jobs++;
 
                         time_t finish_time = time(NULL);
                         
                         double turnaround_time = difftime(finish_time, start_time);
 
-                        printf("Turnaround Time: %f\n", turnaround_time);
+                        //printf("Turnaround Time: %0.2f\n", turnaround_time);
                         
                         total_turnaround_time += turnaround_time;
-                        average_turnaround_time = total_turnaround_time / total_num_of_jobs;
+                        average_turnaround_time = total_turnaround_time / total_completed_jobs;
 
-                        printf("Average Turnaround Time: %f\n", average_turnaround_time);
+                        //printf("Average Turnaround Time: %0.2f\n", average_turnaround_time);
                         
 
                         pthread_mutex_lock(&queue_mutex);
@@ -299,7 +306,7 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_unlock(&dispatcher_condition_mutex);
 
         printf("Total number of job submitted: %i\n", total_num_of_jobs);
-        printf("Average turnaround time: %f seconds\n", average_turnaround_time);
+        printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
         printf("Average CPU time: TODO\n");
         printf("Average waiting time: TODO\n");
         printf("Throughput: TODO\n");
@@ -347,6 +354,7 @@ void parseUserCommand(char* user_command) {
             } else {
                 cleaned_command = cleanCommand(command);
                 user_job.est_run_time = atoi(cleaned_command);
+                user_job.arg_list[1] = strdup(cleaned_command);
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
@@ -493,11 +501,6 @@ void reallocateJobQueue() {
             int job_sub_count = job_count+1;
             while(job_sub_count <= job_queue.queue_job_num-2) {
 
-                //printf("Minimum\n");
-                //printf("Job name %s\t Job Priority: %i\n", new_queue[min_index].job_name, new_queue[min_index].priority);
-                //printf("Compared to\n");
-                //printf("Job name: %s\t Job Priority: %i\n\n", new_queue[job_sub_index].job_name, new_queue[job_sub_index].priority);
-
                 // here is where we check based on on different policies               
                 pthread_mutex_lock(&scheduler_mutex);
                 if(strcmp(scheduler.policy, "Priority") == 0) {
@@ -527,11 +530,6 @@ void reallocateJobQueue() {
              
             // swap min and current index
             Job temp_job = new_queue[min_index];
-            /*printf("\tMinimum Job\n");
-            printf("\tJob name: %s\t Job Priority: %i\n", temp_job.job_name, temp_job.priority);
-
-            printf("\tSwapped with\n");
-            printf("\tJob name: %s\t Job Priority: %i\n\n", new_queue[job_index].job_name, new_queue[job_index].priority);*/
 
             new_queue[min_index] = new_queue[job_index];
             new_queue[job_index] = temp_job; 
