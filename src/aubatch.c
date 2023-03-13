@@ -87,6 +87,9 @@ Job user_job;
 int quit_flag;
 int total_num_of_jobs;
 
+int total_turnaround_time;
+int average_turnaround_time;
+
 
 /**********************
  *                    *
@@ -142,6 +145,8 @@ void init() {
 
     quit_flag = 0;
     total_num_of_jobs = 0;
+    total_turnaround_time = 0;
+    average_turnaround_time = 0;
 
     scheduler.policy = "FCFS";
     scheduler.queue_head = 0;
@@ -231,6 +236,7 @@ void* dispatcherModule(void* ptr) {
 
             if(job.job_name) {
                 pid_t pid;
+                time_t start_time = time(NULL);
                 pid = fork();
  
                 switch(pid) {
@@ -246,6 +252,18 @@ void* dispatcherModule(void* ptr) {
                     default:
                         pid = wait(NULL);
 
+                        time_t finish_time = time(NULL);
+                        
+                        double turnaround_time = difftime(finish_time, start_time);
+
+                        printf("Turnaround Time: %f\n", turnaround_time);
+                        
+                        total_turnaround_time += turnaround_time;
+                        average_turnaround_time = total_turnaround_time / total_num_of_jobs;
+
+                        printf("Average Turnaround Time: %f\n", average_turnaround_time);
+                        
+
                         pthread_mutex_lock(&queue_mutex);
                         job_queue.queue_job_num--;
                         pthread_mutex_unlock(&queue_mutex);
@@ -259,8 +277,6 @@ void* dispatcherModule(void* ptr) {
             }
         }           
     }
-
-    printf("Goodbye\n");
 
 }
 
@@ -283,7 +299,7 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_unlock(&dispatcher_condition_mutex);
 
         printf("Total number of job submitted: %i\n", total_num_of_jobs);
-        printf("Average turnaround time: TODO\n");
+        printf("Average turnaround time: %f seconds\n", average_turnaround_time);
         printf("Average CPU time: TODO\n");
         printf("Average waiting time: TODO\n");
         printf("Throughput: TODO\n");
@@ -345,16 +361,15 @@ void parseUserCommand(char* user_command) {
                     scheduler.job_cache = user_job;
                     total_num_of_jobs++;
 
+                    printf("Job %s was submitted\n", user_job.job_name);
+                    pthread_mutex_lock(&queue_mutex);
+                    printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num+1);
+                    pthread_mutex_unlock(&queue_mutex);
+
                     // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
                     pthread_mutex_unlock(&scheduler_condition_mutex);
-
-                    printf("Job %s was submitted\n", user_job.job_name);
-                    pthread_mutex_lock(&queue_mutex);
-                    printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num);
-                    pthread_mutex_unlock(&queue_mutex);
-
 
                     pthread_mutex_lock(&scheduler_mutex);
                     scheduler.expected_wait_time += user_job.est_run_time;
@@ -406,15 +421,30 @@ void parseUserCommand(char* user_command) {
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
         scheduler.policy = "FCFS";
         reallocateJobQueue();
-        printf("Scheduling policy has been switched to FCFS.\n"); 
+        printf("Scheduling policy has been switched to FCFS. ");
+        pthread_mutex_lock(&queue_mutex);
+        if(job_queue.queue_job_num > 2) {
+            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+        }
+        pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "sjf") == 0) {
         scheduler.policy = "SJF";
         reallocateJobQueue();
         printf("Scheduling policy has been switched to SJF.\n");
+        pthread_mutex_lock(&queue_mutex);
+        if(job_queue.queue_job_num > 2) {
+            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+        }
+        pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "priority") == 0) {
         scheduler.policy = "Priority";
         reallocateJobQueue();
         printf("Scheduling policy has been switched to Priority.\n");
+        pthread_mutex_lock(&queue_mutex);
+        if(job_queue.queue_job_num > 2) {
+            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+        }
+        pthread_mutex_unlock(&queue_mutex);
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
