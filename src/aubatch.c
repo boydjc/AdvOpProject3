@@ -21,7 +21,7 @@ typedef struct Job {
     char* job_name;
     int est_run_time;
     int priority;
-    time_t unix_seconds;
+    time_t unix_arrival_time;
     struct tm arrival_time;
     int is_running;
     char* arg_list[20];
@@ -29,9 +29,8 @@ typedef struct Job {
 
 typedef struct Scheduler {
     char* policy;
-    int expected_wait_time;
     int queue_head;
-
+    int expected_wait_time;
     Job job_cache;
 } Scheduler;
 
@@ -88,12 +87,17 @@ int quit_flag;
 int total_num_of_jobs;
 int total_completed_jobs;
 
-
 float total_turnaround_time;
 float average_turnaround_time;
 
 float total_wait_time;
 float average_wait_time;
+
+float total_cpu_time;
+float average_cpu_time;
+
+float total_response_time;
+float average_response_time;
 
 
 /**********************
@@ -140,7 +144,6 @@ int main() {
  *                           *
  *    Function Definitions   *
  *                           *
- *                           *
  *****************************/
 
 /*
@@ -152,6 +155,10 @@ void init() {
     total_num_of_jobs = 0;
     total_turnaround_time = 0;
     average_turnaround_time = 0;
+    total_cpu_time = 0;
+    average_cpu_time = 0;
+    total_wait_time = 0;
+    average_wait_time = 0;
     total_completed_jobs = 0;
 
     scheduler.policy = "FCFS";
@@ -257,27 +264,53 @@ void* dispatcherModule(void* ptr) {
                         break;
                     default:
                         pid = wait(NULL);
+                        pthread_mutex_lock(&scheduler_mutex);
+                        scheduler.expected_wait_time -= job.est_run_time;
+                        pthread_mutex_unlock(&scheduler_mutex);
                         total_completed_jobs++;
 
                         time_t finish_time = time(NULL);
                         
-                        double turnaround_time = difftime(finish_time, start_time);
+                        double turnaround_time = difftime(finish_time, job.unix_arrival_time);
 
                         //printf("Turnaround Time: %0.2f\n", turnaround_time);
-                        
+                                                
                         total_turnaround_time += turnaround_time;
                         average_turnaround_time = total_turnaround_time / total_completed_jobs;
 
                         //printf("Average Turnaround Time: %0.2f\n", average_turnaround_time);
-                        
+
+                        double cpu_time = difftime(finish_time, start_time);
+                        //printf("CPU Time: %0.2f\n", cpu_time);                        
+
+                        total_cpu_time += cpu_time;
+                        average_cpu_time = total_cpu_time / total_completed_jobs;
+
+                        //printf("Average CPU Time: %0.2f\n", average_cpu_time);
+
+
+                        double wait_time = difftime(turnaround_time, cpu_time);
+
+                        //printf("Wait Time: %0.2f\n", wait_time);
+
+                        total_wait_time += wait_time;
+                        average_wait_time = total_wait_time / total_completed_jobs;
+
+                        //printf("Average Wait Time: %0.2f\n", average_wait_time);
+
+                        double response_time = difftime(start_time, job.unix_arrival_time);
+
+                        total_response_time += response_time;
+                        average_response_time = total_response_time / total_completed_jobs;
+
+                        //printf("Response time: %0.2f\n", response_time);
+                        //printf("Average Response Time: %0.2f\n\n", average_response_time);
+
 
                         pthread_mutex_lock(&queue_mutex);
                         job_queue.queue_job_num--;
                         pthread_mutex_unlock(&queue_mutex);
 
-                        pthread_mutex_lock(&scheduler_mutex);
-                        scheduler.expected_wait_time -= job.est_run_time;
-                        pthread_mutex_unlock(&scheduler_mutex);
                         break;
                 }
 
@@ -307,9 +340,12 @@ void parseUserCommand(char* user_command) {
 
         printf("Total number of job submitted: %i\n", total_num_of_jobs);
         printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
-        printf("Average CPU time: TODO\n");
-        printf("Average waiting time: TODO\n");
-        printf("Throughput: TODO\n");
+        printf("Average CPU time: %0.2f seconds\n", average_cpu_time);
+        printf("Average wait time: %0.2f seconds\n", average_wait_time);
+
+        double throughput = 1 / average_turnaround_time;
+
+        printf("Throughput: %0.2f No./second \n\n", throughput);
     } else if(strcmp(cleaned_command, "help") == 0) {
         command = strtok(NULL, " ");
         if(command == NULL) {
@@ -332,14 +368,14 @@ void parseUserCommand(char* user_command) {
                 displayQuitHelp();
             } else {
                 fprintf(stderr, "Error: Command not found. Make sure you are passing the '-' char with your command you need help with.\n");
-                fprintf(stderr, "Example: help -test\n");
+                fprintf(stderr, "Example: help -test\n\n");
             }
         }
 
     } else if(strcmp(cleaned_command, "run") == 0) {
         command = strtok(NULL, " ");
         if(command == NULL) {
-            fprintf(stderr, "ERROR: You must specify a file to run.\n");
+            fprintf(stderr, "ERROR: You must specify a file to run.\n\n");
             displayRunHelp();
         } else {
             // program name
@@ -349,7 +385,7 @@ void parseUserCommand(char* user_command) {
             
             command = strtok(NULL, " ");
             if(command == NULL) {
-                fprintf(stderr, "ERROR: You must specify an estimated runtime length for the given file.\n");
+                fprintf(stderr, "ERROR: You must specify an estimated runtime length for the given file.\n\n");
                 displayRunHelp();
             } else {
                 cleaned_command = cleanCommand(command);
@@ -357,13 +393,13 @@ void parseUserCommand(char* user_command) {
                 user_job.arg_list[1] = strdup(cleaned_command);
                 command = strtok(NULL, " ");
                 if(command == NULL) {
-                    fprintf(stderr, "ERROR: You must specify a priority for the given file.\n");
+                    fprintf(stderr, "ERROR: You must specify a priority for the given file.\n\n");
                     displayRunHelp();
                 } else {
                     cleaned_command = cleanCommand(command);
                     user_job.priority = atoi(cleaned_command);
-                    user_job.unix_seconds = time(NULL);
-                    localtime_r(&user_job.unix_seconds, &user_job.arrival_time);
+                    user_job.unix_arrival_time = time(NULL);
+                    localtime_r(&user_job.unix_arrival_time, &user_job.arrival_time);
                     user_job.is_running = 0;
                     
                     scheduler.job_cache = user_job;
@@ -374,16 +410,16 @@ void parseUserCommand(char* user_command) {
                     printf("Total number of jobs in the queue: %i\n", job_queue.queue_job_num+1);
                     pthread_mutex_unlock(&queue_mutex);
 
+                    pthread_mutex_lock(&scheduler_mutex);
+                    scheduler.expected_wait_time += user_job.est_run_time;
+                    printf("Expected waiting time: %i seconds\n", scheduler.expected_wait_time);
+                    printf("Scheduling Policy: %s\n\n", scheduler.policy);
+                    pthread_mutex_unlock(&scheduler_mutex);
+
                     // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
                     pthread_mutex_unlock(&scheduler_condition_mutex);
-
-                    pthread_mutex_lock(&scheduler_mutex);
-                    scheduler.expected_wait_time += user_job.est_run_time;
-                    printf("Expected waiting time: %i seconds\n", scheduler.expected_wait_time);
-                    pthread_mutex_unlock(&scheduler_mutex);
-                    printf("Scheduling Policy: %s\n", scheduler.policy);
 
                 }
             }
@@ -424,7 +460,7 @@ void parseUserCommand(char* user_command) {
             }
         }
         pthread_mutex_unlock(&queue_mutex);
-        printf("Scheduling Policy: %s\n", scheduler.policy);   
+        printf("Scheduling Policy: %s\n\n", scheduler.policy);   
        
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
         scheduler.policy = "FCFS";
@@ -432,7 +468,9 @@ void parseUserCommand(char* user_command) {
         printf("Scheduling policy has been switched to FCFS. ");
         pthread_mutex_lock(&queue_mutex);
         if(job_queue.queue_job_num > 2) {
-            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+            printf("All the %i waiting jobs have been rescheduled\n\n", job_queue.queue_job_num-1);
+        } else {
+            printf("\n");
         }
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "sjf") == 0) {
@@ -441,7 +479,9 @@ void parseUserCommand(char* user_command) {
         printf("Scheduling policy has been switched to SJF.\n");
         pthread_mutex_lock(&queue_mutex);
         if(job_queue.queue_job_num > 2) {
-            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+            printf("All the %i waiting jobs have been rescheduled\n\n", job_queue.queue_job_num-1);
+        } else {
+            printf("\n");
         }
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "priority") == 0) {
@@ -450,7 +490,9 @@ void parseUserCommand(char* user_command) {
         printf("Scheduling policy has been switched to Priority.\n");
         pthread_mutex_lock(&queue_mutex);
         if(job_queue.queue_job_num > 2) {
-            printf("All the %i waiting jobs have been rescheduled\n", job_queue.queue_job_num-1);
+            printf("All the %i waiting jobs have been rescheduled\n\n", job_queue.queue_job_num-1);
+        } else {
+            printf("\n");
         }
         pthread_mutex_unlock(&queue_mutex);
     } else {
@@ -462,8 +504,8 @@ void parseUserCommand(char* user_command) {
 
 /* decided to use something like selection sort here where the minimum value will be 
  * dependent on what policy the scheduler is using. Doing it this 
- * way and having lower priority be more important will allow us to use
- * selection sort for each policy. */
+ * way and having lower priority be more important will allowed me to use
+ * one sorting mechanism for each policy. */
 void reallocateJobQueue() {
 
     Job new_queue[JOB_QUEUE_MAX_SIZE];
@@ -508,7 +550,7 @@ void reallocateJobQueue() {
                         min_index = job_sub_index;
                     }
                 } else if(strcmp(scheduler.policy, "FCFS") == 0) {
-                    if(new_queue[job_sub_index].unix_seconds < new_queue[min_index].unix_seconds) {
+                    if(new_queue[job_sub_index].unix_arrival_time < new_queue[min_index].unix_arrival_time) {
                         min_index = job_sub_index;
                     }
                 } else if(strcmp(scheduler.policy, "SJF") == 0) {
