@@ -278,14 +278,14 @@ void parseUserCommand(char* user_command) {
             displayTestHelp();
         } else {
             cleaned_command = cleanCommand(command);
-            char* job_name = cleaned_command;
+            char* job_name = strdup(cleaned_command);
             command = strtok(NULL, " ");
             if(command == NULL) {
                 fprintf(stderr, "ERROR: You must specify a policy to test.\n\n");
                 displayTestHelp();
             } else {
                 cleaned_command = cleanCommand(command);
-                char* policy = cleaned_command;
+                char* policy = strdup(cleaned_command);
                 command = strtok(NULL, " ");
                 if(command == NULL) {
                     fprintf(stderr, "ERROR: You must specify the number of jobs to insert.\n\n");
@@ -336,6 +336,7 @@ void parseUserCommand(char* user_command) {
                                     pthread_cond_signal(&tester_schedule_condition);
                                     pthread_mutex_unlock(&tester_condition_mutex);
 
+                                    printf("---- Test Metrics ----\n");
                                     printf("Benchmark name: %s\n", job_name);
                                     printf("Policy: %s\n", policy);
                                     printf("Number of Jobs: %i\n", num_of_test_jobs);
@@ -402,7 +403,7 @@ void reallocateJobQueue() {
 
                 // here is where we check based on on different policies               
                 pthread_mutex_lock(&scheduler_mutex);
-                if(strcmp(scheduler.policy, "Priority") == 0) {
+                if(strcmp(scheduler.policy, "priority") == 0) {
                     if(new_queue[job_sub_index].priority < new_queue[min_index].priority) {
                         min_index = job_sub_index;
                     }
