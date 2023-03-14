@@ -20,9 +20,11 @@ typedef struct Tester {
 void* testingModule();
 
 pthread_mutex_t tester_condition_mutex;
+pthread_mutex_t tester_mutex;
 pthread_cond_t tester_schedule_condition;
 
 extern TestCase test_case;
 extern Tester tester;
 extern pthread_mutex_t tester_condition_mutex;
 extern pthread_cond_t tester_schedule_condition;
+extern pthread_mutex_t tester_mutex;

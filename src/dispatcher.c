@@ -3,6 +3,7 @@
 
 #include <dispatcher.h>
 #include <scheduler.h>
+#include <autest.h>
 #include <aubatch.h>
 #include <pthread.h>
 #include <job_queue.h>
@@ -20,14 +21,15 @@ Dispatcher dispatcher;
 
 void* dispatcherModule(void* ptr) {
 
-    while(quit_flag != 1) {
+    int num_of_jobs = 0;
+
+    while(quit_flag != 1 || num_of_jobs >= 1) {
         pthread_mutex_lock(&dispatcher_condition_mutex);
-        if(job_queue.queue_job_num <= 0) {
+        if(job_queue.queue_job_num <= 0 && quit_flag <= 0) {
             pthread_cond_wait(&dispatcher_queue_condition, &dispatcher_condition_mutex);
         }
         pthread_mutex_unlock(&dispatcher_condition_mutex);
-        
-        int num_of_jobs = 0;
+
         pthread_mutex_lock(&queue_mutex);
         num_of_jobs = job_queue.queue_job_num;
         pthread_mutex_unlock(&queue_mutex);
@@ -88,6 +90,14 @@ void* dispatcherModule(void* ptr) {
 
                         pthread_mutex_lock(&queue_mutex);
                         job_queue.queue_job_num--;
+                        pthread_mutex_lock(&tester_mutex);
+                        if(job_queue.queue_job_num <= 0 && tester.test_started >= 1) {
+                            tester.test_started = 0;
+                            pthread_mutex_lock(&tester_condition_mutex);
+                            pthread_cond_signal(&tester_schedule_condition);
+                            pthread_mutex_unlock(&tester_condition_mutex);
+                        }
+                        pthread_mutex_unlock(&tester_mutex);
                         pthread_mutex_unlock(&queue_mutex);
 
                         break;
@@ -95,6 +105,17 @@ void* dispatcherModule(void* ptr) {
 
             }
         }           
+    }
+
+    if(quit_flag >= 1 && total_num_of_jobs >= 1) {
+        printf("Total number of job submitted: %i\n", total_num_of_jobs);
+        printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
+        printf("Average CPU time: %0.2f seconds\n", average_cpu_time);
+        printf("Average wait time: %0.2f seconds\n", average_wait_time);
+
+        double throughput = 1 / average_turnaround_time;
+
+        printf("Throughput: %0.2f No./second \n\n", throughput);
     }
 
 }
