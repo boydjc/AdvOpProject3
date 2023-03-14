@@ -39,7 +39,7 @@ void displayPriorityHelp() {
 }
 
 void displayTestHelp() {
-    printf("\ttest <benchmark> <policy> <num_of_jobs> <priority_levels>\n\n");
+    printf("\ttest <benchmark> <policy> <num_of_jobs> <arrival_rate> <priority_levels>\n\n");
     printf("\t\t<min_cpu_time> <max_cpu_time>\n\n");
 }
 

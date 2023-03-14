@@ -10,6 +10,7 @@
 #include <dispatcher.h>
 #include <job_queue.h>
 #include <menu.h>
+#include <autest.h>
 
 #define MAX_JOB_ARGS 20
 
@@ -32,10 +33,11 @@ int main() {
 
     init();
 
-    pthread_t scheduler_thread, dispatcher_thread;
+    pthread_t scheduler_thread, dispatcher_thread, tester_thread;
 
     int iret1 = pthread_create(&scheduler_thread, NULL, schedulerModule, NULL);
     int iret2 = pthread_create(&dispatcher_thread, NULL, dispatcherModule, NULL);
+    int iret3 = pthread_create(&tester_thread, NULL, testingModule, NULL);
 
     displayGreeting();
     while(quit_flag == 0) {
@@ -46,6 +48,7 @@ int main() {
 
     pthread_join(scheduler_thread, NULL);
     pthread_join(dispatcher_thread, NULL);
+    pthread_join(tester_thread, NULL);
 
     free(user_command);
     user_command = NULL;
@@ -103,6 +106,10 @@ void parseUserCommand(char* user_command) {
         pthread_cond_signal(&dispatcher_queue_condition);
         pthread_mutex_unlock(&dispatcher_condition_mutex);
 
+        pthread_mutex_lock(&tester_condition_mutex);
+        pthread_cond_signal(&tester_schedule_condition);
+        pthread_mutex_unlock(&tester_condition_mutex);
+
         printf("Total number of job submitted: %i\n", total_num_of_jobs);
         printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
         printf("Average CPU time: %0.2f seconds\n", average_cpu_time);
@@ -143,7 +150,6 @@ void parseUserCommand(char* user_command) {
             fprintf(stderr, "ERROR: You must specify a file to run.\n\n");
             displayRunHelp();
         } else {
-            // program name
             cleaned_command = cleanCommand(command);
             user_job.job_name = strdup(cleaned_command);
             user_job.arg_list[0] = strdup(cleaned_command);
@@ -181,7 +187,6 @@ void parseUserCommand(char* user_command) {
                     printf("Scheduling Policy: %s\n\n", scheduler.policy);
                     pthread_mutex_unlock(&scheduler_mutex);
 
-                    // signal to scheduler and let it know we are ready for it to process the job
                     pthread_mutex_lock(&scheduler_condition_mutex);
                     pthread_cond_signal(&scheduler_queue_condition);
                     pthread_mutex_unlock(&scheduler_condition_mutex);
@@ -228,7 +233,9 @@ void parseUserCommand(char* user_command) {
         printf("Scheduling Policy: %s\n\n", scheduler.policy);   
        
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
+        pthread_mutex_lock(&scheduler_mutex);
         scheduler.policy = "FCFS";
+        pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to FCFS. ");
         pthread_mutex_lock(&queue_mutex);
@@ -239,7 +246,9 @@ void parseUserCommand(char* user_command) {
         }
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "sjf") == 0) {
+        pthread_mutex_lock(&scheduler_mutex);
         scheduler.policy = "SJF";
+        pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to SJF.\n");
         pthread_mutex_lock(&queue_mutex);
@@ -250,7 +259,9 @@ void parseUserCommand(char* user_command) {
         }
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "priority") == 0) {
+        pthread_mutex_lock(&scheduler_mutex);
         scheduler.policy = "Priority";
+        pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to Priority.\n");
         pthread_mutex_lock(&queue_mutex);
@@ -260,6 +271,87 @@ void parseUserCommand(char* user_command) {
             printf("\n");
         }
         pthread_mutex_unlock(&queue_mutex);
+    } else if(strcmp(cleaned_command, "test") == 0) {
+        command = strtok(NULL, " ");
+        if(command == NULL) {
+            fprintf(stderr, "ERROR: You must specify a file to run.\n\n");
+            displayTestHelp();
+        } else {
+            cleaned_command = cleanCommand(command);
+            char* job_name = cleaned_command;
+            command = strtok(NULL, " ");
+            if(command == NULL) {
+                fprintf(stderr, "ERROR: You must specify a policy to test.\n\n");
+                displayTestHelp();
+            } else {
+                cleaned_command = cleanCommand(command);
+                char* policy = cleaned_command;
+                command = strtok(NULL, " ");
+                if(command == NULL) {
+                    fprintf(stderr, "ERROR: You must specify the number of jobs to insert.\n\n");
+                    displayTestHelp();
+                } else {
+                    cleaned_command = cleanCommand(command);
+                    int num_of_test_jobs = atoi(cleaned_command);
+                    command = strtok(NULL, " ");
+                    if(command == NULL) {
+                        fprintf(stderr, "ERROR: You must specify an arrival rate for the jobs.\n\n");
+                        displayTestHelp();
+                    } else {
+                        cleaned_command = cleanCommand(command);
+                        float arrival_rate = atof(cleaned_command);
+                        command = strtok(NULL, " ");
+                        if(command == NULL) {
+                            fprintf(stderr, "ERROR: You must specify the max number of priority levels.\n\n");
+                            displayTestHelp();
+                        } else {
+                            cleaned_command = cleanCommand(command);
+                            int max_priority_level = atoi(cleaned_command);
+                            command = strtok(NULL, " ");
+                            if(command == NULL) {
+                                fprintf(stderr, "ERROR: You must specify the minimum cpu time allowed to be allocated.\n\n");
+                                displayTestHelp();
+                            } else {
+                                cleaned_command = cleanCommand(command);
+                                int min_cpu_time = atoi(cleaned_command);
+                                command = strtok(NULL, " ");
+                                if(command == NULL) {
+                                    fprintf(stderr, "ERROR: You must specify the maximum cpu time allowed to be allocated.\n\n");
+                                    displayTestHelp();
+                                } else {
+                                    cleaned_command = cleanCommand(command);
+                                    int max_cpu_time = atoi(cleaned_command);
+                                    
+                                    tester.test_case.benchmark = job_name;
+                                    tester.test_case.policy = policy;
+                                    tester.test_case.num_of_jobs = num_of_test_jobs;
+                                    tester.test_case.arrival_rate = arrival_rate;
+                                    tester.test_case.max_priority_level = max_priority_level; 
+                                    tester.test_case.min_cpu_time = min_cpu_time;
+                                    tester.test_case.max_cpu_time = max_cpu_time;                   
+
+                                    tester.test_started = 1;
+
+                                    pthread_mutex_lock(&tester_condition_mutex);
+                                    pthread_cond_signal(&tester_schedule_condition);
+                                    pthread_mutex_unlock(&tester_condition_mutex);
+
+                                    printf("Benchmark name: %s\n", job_name);
+                                    printf("Policy: %s\n", policy);
+                                    printf("Number of Jobs: %i\n", num_of_test_jobs);
+                                    printf("Arrival rate: %f\n", arrival_rate);
+                                    printf("Priority Levels: %i\n", max_priority_level);
+                                    printf("Min Cpu Time: %i\n", min_cpu_time);
+                                    printf("Max Cpu Time: %i\n\n", max_cpu_time);
+                                }
+                            }
+                            
+                        }
+                    }
+                }
+
+            }
+        }
     } else {
         printf("\tError: That command is not recognized. Type 'help' for a list of commands.\n\n");
     }
