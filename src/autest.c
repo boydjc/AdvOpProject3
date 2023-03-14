@@ -15,6 +15,8 @@ pthread_mutex_t tester_condition_mutex = PTHREAD_MUTEX_INITIALIZER;
 
 pthread_cond_t tester_schedule_condition = PTHREAD_COND_INITIALIZER;
 
+pthread_mutex_t tester_mutex = PTHREAD_MUTEX_INITIALIZER; // for accessing test_running variable from dispatcher
+
 void* testingModule() {
 
     srand(time(NULL));
@@ -67,8 +69,29 @@ void* testingModule() {
                 sleep(sleep_time);
             }  
 
-            tester.test_started = 0;
-            printf("Finished Adding Jobs\n");
+           printf("Finished Adding Jobs\n");
+
+            while(tester.test_started >= 1) {
+                // wait until the test is done
+                pthread_mutex_lock(&tester_condition_mutex);
+                    if(tester.test_started >= 1) {
+                        pthread_cond_wait(&tester_schedule_condition, &tester_condition_mutex);
+                    }
+                pthread_mutex_unlock(&tester_condition_mutex);
+
+                printf("Total number of job submitted: %i\n", total_num_of_jobs);
+                printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
+                printf("Average CPU time: %0.2f seconds\n", average_cpu_time);
+                printf("Average wait time: %0.2f seconds\n", average_wait_time);
+                double throughput = 1 / average_turnaround_time;
+
+                printf("Throughput: %0.2f No./second \n\n", throughput);
+
+                // call init to reset all of the metric values
+                init();
+
+            }
+
         }
     }
 }

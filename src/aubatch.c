@@ -101,7 +101,13 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_lock(&scheduler_condition_mutex);
         pthread_cond_signal(&scheduler_queue_condition);
         pthread_mutex_unlock(&scheduler_condition_mutex);
-       
+
+        pthread_mutex_lock(&queue_mutex);
+        if(job_queue.queue_job_num > 0) {
+            printf("Finishing remaining %i jobs...\n", job_queue.queue_job_num);
+        }
+        pthread_mutex_unlock(&queue_mutex);
+
         pthread_mutex_lock(&dispatcher_condition_mutex);
         pthread_cond_signal(&dispatcher_queue_condition);
         pthread_mutex_unlock(&dispatcher_condition_mutex);
@@ -109,15 +115,7 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_lock(&tester_condition_mutex);
         pthread_cond_signal(&tester_schedule_condition);
         pthread_mutex_unlock(&tester_condition_mutex);
-
-        printf("Total number of job submitted: %i\n", total_num_of_jobs);
-        printf("Average turnaround time: %0.2f seconds\n", average_turnaround_time);
-        printf("Average CPU time: %0.2f seconds\n", average_cpu_time);
-        printf("Average wait time: %0.2f seconds\n", average_wait_time);
-
-        double throughput = 1 / average_turnaround_time;
-
-        printf("Throughput: %0.2f No./second \n\n", throughput);
+       
     } else if(strcmp(cleaned_command, "help") == 0) {
         command = strtok(NULL, " ");
         if(command == NULL) {
@@ -260,7 +258,7 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "priority") == 0) {
         pthread_mutex_lock(&scheduler_mutex);
-        scheduler.policy = "Priority";
+        scheduler.policy = "priority";
         pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to Priority.\n");
@@ -361,9 +359,7 @@ void parseUserCommand(char* user_command) {
 
 
 /* decided to use something like selection sort here where the minimum value will be 
- * dependent on what policy the scheduler is using. Doing it this 
- * way and having lower priority be more important will allowed me to use
- * one sorting mechanism for each policy. */
+ * dependent on what policy the scheduler is using. */
 void reallocateJobQueue() {
 
     Job new_queue[JOB_QUEUE_MAX_SIZE];
@@ -404,7 +400,7 @@ void reallocateJobQueue() {
                 // here is where we check based on on different policies               
                 pthread_mutex_lock(&scheduler_mutex);
                 if(strcmp(scheduler.policy, "priority") == 0) {
-                    if(new_queue[job_sub_index].priority < new_queue[min_index].priority) {
+                    if(new_queue[job_sub_index].priority > new_queue[min_index].priority) {
                         min_index = job_sub_index;
                     }
                 } else if(strcmp(scheduler.policy, "FCFS") == 0) {
