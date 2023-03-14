@@ -15,7 +15,6 @@ pthread_mutex_t scheduler_mutex = PTHREAD_MUTEX_INITIALIZER; // for accessing ex
 Scheduler scheduler;
 
 void* schedulerModule(void* ptr) {
-    //printf("Scheduler is online and waiting...\n");
 
     while(quit_flag != 1) {
         pthread_mutex_lock(&scheduler_condition_mutex);
@@ -28,13 +27,9 @@ void* schedulerModule(void* ptr) {
         pthread_mutex_unlock(&queue_mutex);
 
         if(quit_flag != 1) {
-            //printf("Scheduler inserting job\n");
-            //printf("\tScheduler head value before inserting job: %i\n", scheduler.queue_head);
             pthread_mutex_lock(&queue_mutex);
-            //printf("\tNumber of elements in queue before add: %i\n", job_queue.queue_job_num);
             job_queue.queue[scheduler.queue_head] = scheduler.job_cache;
             job_queue.queue_job_num++;
-            //printf("\tNumber of elements in queue after add: %i\n", job_queue.queue_job_num);
             pthread_mutex_unlock(&queue_mutex);
 
             if(scheduler.queue_head >= JOB_QUEUE_MAX_SIZE-1) {
@@ -43,7 +38,6 @@ void* schedulerModule(void* ptr) {
                 scheduler.queue_head++;
             }
 
-            //printf("\tScheduler head value after inserting job: %i\n", scheduler.queue_head);
             
             reallocateJobQueue();
 
@@ -53,7 +47,5 @@ void* schedulerModule(void* ptr) {
             pthread_mutex_unlock(&dispatcher_condition_mutex);
         }         
     }
-
-    printf("Waiting for executing job to be done...\n");
  
 }
