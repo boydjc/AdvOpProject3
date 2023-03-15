@@ -232,7 +232,7 @@ void parseUserCommand(char* user_command) {
        
     } else if(strcmp(cleaned_command, "fcfs") == 0) {
         pthread_mutex_lock(&scheduler_mutex);
-        scheduler.policy = "FCFS";
+        scheduler.policy = "fcfs";
         pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to FCFS. ");
@@ -245,7 +245,7 @@ void parseUserCommand(char* user_command) {
         pthread_mutex_unlock(&queue_mutex);
     } else if(strcmp(cleaned_command, "sjf") == 0) {
         pthread_mutex_lock(&scheduler_mutex);
-        scheduler.policy = "SJF";
+        scheduler.policy = "sjf";
         pthread_mutex_unlock(&scheduler_mutex);
         reallocateJobQueue();
         printf("Scheduling policy has been switched to SJF.\n");
@@ -403,11 +403,11 @@ void reallocateJobQueue() {
                     if(new_queue[job_sub_index].priority > new_queue[min_index].priority) {
                         min_index = job_sub_index;
                     }
-                } else if(strcmp(scheduler.policy, "FCFS") == 0) {
+                } else if(strcmp(scheduler.policy, "fcfs") == 0) {
                     if(new_queue[job_sub_index].unix_arrival_time < new_queue[min_index].unix_arrival_time) {
                         min_index = job_sub_index;
                     }
-                } else if(strcmp(scheduler.policy, "SJF") == 0) {
+                } else if(strcmp(scheduler.policy, "sjf") == 0) {
                     if(new_queue[job_sub_index].est_run_time < new_queue[min_index].est_run_time) {
                         min_index = job_sub_index;
                     }
